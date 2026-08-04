@@ -6,7 +6,7 @@
 
 **Architecture:** 交互式 REPL 工具。用户提问 → `classifier` 用小调用判断是否属于配置的领域（返回 JSON）→ 领域外输出拒绝语；领域内由 `generator` 携带多轮历史流式生成回答。所有 HTTP 调用封装在 `llm_client`，走 OpenAI 兼容的 `/chat/completions` API。
 
-**Tech Stack:** Python 3.10+（仅依赖 `requests`），测试用 `pytest`，无框架。
+**Tech Stack:** Python 3.10+（仅依赖 `requests`），测试用 `pytest`，无框架。环境由 `uv` 管理（pyproject.toml + uv.lock + 自动生成的 `.venv`）。
 
 ## Global Constraints
 
@@ -18,27 +18,39 @@
 - 多轮历史上限：最近 20 轮。
 - 所有用户可见文案使用中文。
 - 退出命令：`exit` / `quit`。
-- 测试运行方式：项目根目录执行 `./.venv/bin/python -m pytest`。
+- 测试运行方式：项目根目录执行 `uv run pytest`；项目可执行入口用 `uv run python -m agent`。
+- 依赖清单在 `pyproject.toml`（`project.dependencies` 放运行时依赖，`dependency-groups.dev` 放开发依赖），由 `uv sync` 安装并锁版本到 `uv.lock`。
 
 ---
 
-### Task 1: 项目脚手架
+### Task 1: 项目脚手架（uv）
 
 **Files:**
-- Create: `requirements.txt`
+- Create: `pyproject.toml`
 - Create: `.gitignore`
 - Create: `pytest.ini`
 - Create: `agent/__init__.py`
 - Create: `tests/__init__.py`
 
 **Interfaces:**
-- Produces: `agent` 包（空 `__init__.py`）、可用的 venv、`pytest` 可发现 `tests/`。
+- Produces: `agent` 包（空 `__init__.py`）、uv 管理的虚拟环境与 `uv.lock`、`pytest` 可发现 `tests/`。
 
-- [ ] **Step 1: 创建 `requirements.txt`**
+- [ ] **Step 1: 创建 `pyproject.toml`**
 
-```text
-requests>=2.31
-pytest>=8.0
+```toml
+[project]
+name = "expertforge"
+version = "0.1.0"
+description = "单领域可配置的 AI 专家 Agent CLI"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.31",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
 ```
 
 - [ ] **Step 2: 创建 `.gitignore`**
@@ -61,23 +73,24 @@ testpaths = tests
 
 创建 `agent/__init__.py` 与 `tests/__init__.py`，内容均为空文件。
 
-- [ ] **Step 5: 创建 venv 并安装依赖**
+- [ ] **Step 5: 安装依赖并生成锁文件**
 
 ```bash
-python3 -m venv .venv
-./.venv/bin/python -m pip install -r requirements.txt
+uv sync
 ```
+
+Expected: 生成 `.venv` 与 `uv.lock`，输出 `Installed <n> packages`，`requests` 与 `pytest` 及传递依赖安装成功。
 
 - [ ] **Step 6: 验证**
 
-Run: `./.venv/bin/python -m pytest`
+Run: `uv run pytest`
 Expected: 无测试被收集，退出码 0（`no tests ran`）。
 
 - [ ] **Step 7: 提交**
 
 ```bash
-git add requirements.txt .gitignore pytest.ini agent/__init__.py tests/__init__.py
-git commit -m "chore: scaffold project"
+git add pyproject.toml uv.lock .gitignore pytest.ini agent/__init__.py tests/__init__.py
+git commit -m "chore: scaffold project with uv"
 ```
 
 ---
@@ -205,7 +218,7 @@ def test_get_api_key_missing(monkeypatch):
 
 - [ ] **Step 2: 运行测试确认失败**
 
-Run: `./.venv/bin/python -m pytest tests/test_config.py -v`
+Run: `uv run pytest tests/test_config.py -v`
 Expected: FAIL（`ModuleNotFoundError: No module named 'agent.config'`）。
 
 - [ ] **Step 3: 实现 `agent/config.py`**
@@ -294,7 +307,7 @@ def get_api_key() -> str:
 
 - [ ] **Step 4: 运行测试确认通过**
 
-Run: `./.venv/bin/python -m pytest tests/test_config.py -v`
+Run: `uv run pytest tests/test_config.py -v`
 Expected: PASS（11 项）。
 
 - [ ] **Step 5: 提交**
@@ -388,7 +401,7 @@ def test_chat_completion_raises_llm_error_on_http_error(monkeypatch):
 
 - [ ] **Step 2: 运行测试确认失败**
 
-Run: `./.venv/bin/python -m pytest tests/test_llm_client.py -v`
+Run: `uv run pytest tests/test_llm_client.py -v`
 Expected: FAIL（`ModuleNotFoundError`）。
 
 - [ ] **Step 3: 实现 `agent/llm_client.py`**
@@ -477,7 +490,7 @@ class LLMClient:
 
 - [ ] **Step 4: 运行测试确认通过**
 
-Run: `./.venv/bin/python -m pytest tests/test_llm_client.py -v`
+Run: `uv run pytest tests/test_llm_client.py -v`
 Expected: PASS（3 项）。
 
 - [ ] **Step 5: 提交**
@@ -564,7 +577,7 @@ def test_propagates_llm_error():
 
 - [ ] **Step 2: 运行测试确认失败**
 
-Run: `./.venv/bin/python -m pytest tests/test_classifier.py -v`
+Run: `uv run pytest tests/test_classifier.py -v`
 Expected: FAIL（`ModuleNotFoundError`）。
 
 - [ ] **Step 3: 实现 `agent/classifier.py`**
@@ -643,7 +656,7 @@ def classify_question(
 
 - [ ] **Step 4: 运行测试确认通过**
 
-Run: `./.venv/bin/python -m pytest tests/test_classifier.py -v`
+Run: `uv run pytest tests/test_classifier.py -v`
 Expected: PASS（5 项）。
 
 - [ ] **Step 5: 提交**
@@ -701,7 +714,7 @@ def test_build_messages_truncates_history():
 
 - [ ] **Step 2: 运行测试确认失败**
 
-Run: `./.venv/bin/python -m pytest tests/test_generator.py -v`
+Run: `uv run pytest tests/test_generator.py -v`
 Expected: FAIL（`ModuleNotFoundError`）。
 
 - [ ] **Step 3: 实现 `agent/generator.py`**
@@ -742,7 +755,7 @@ def build_messages(
 
 - [ ] **Step 4: 运行测试确认通过**
 
-Run: `./.venv/bin/python -m pytest tests/test_generator.py -v`
+Run: `uv run pytest tests/test_generator.py -v`
 Expected: PASS（3 项）。
 
 - [ ] **Step 5: 提交**
@@ -850,7 +863,7 @@ def test_repl_blank_input_skipped(monkeypatch, capsys):
 
 - [ ] **Step 2: 运行测试确认失败**
 
-Run: `./.venv/bin/python -m pytest tests/test_repl.py -v`
+Run: `uv run pytest tests/test_repl.py -v`
 Expected: FAIL（`ModuleNotFoundError`）。
 
 - [ ] **Step 3: 实现 `agent/repl.py`**
@@ -918,7 +931,7 @@ def run_repl(client: LLMClient, config: AgentConfig) -> None:
 
 - [ ] **Step 4: 运行测试确认通过**
 
-Run: `./.venv/bin/python -m pytest tests/test_repl.py -v`
+Run: `uv run pytest tests/test_repl.py -v`
 Expected: PASS（4 项）。
 
 - [ ] **Step 5: 提交**
@@ -1012,7 +1025,7 @@ def test_main_runs_repl(tmp_path, monkeypatch, capsys):
 
 - [ ] **Step 2: 运行测试确认失败**
 
-Run: `./.venv/bin/python -m pytest tests/test_agent_cli.py -v`
+Run: `uv run pytest tests/test_agent_cli.py -v`
 Expected: FAIL（`ModuleNotFoundError`）。
 
 - [ ] **Step 3: 实现 `agent/agent_cli.py`**
@@ -1066,7 +1079,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 5: 运行测试确认通过**
 
-Run: `./.venv/bin/python -m pytest tests/test_agent_cli.py -v`
+Run: `uv run pytest tests/test_agent_cli.py -v`
 Expected: PASS（4 项）。
 
 - [ ] **Step 6: 创建 `config.example.json`**
@@ -1086,16 +1099,16 @@ Expected: PASS（4 项）。
 
 - [ ] **Step 7: 更新 `README.md`**
 
-覆盖：项目简介、安装（`python3 -m venv .venv && ./.venv/bin/pip install -r requirements.txt`）、配置（复制 `config.example.json` 为 `config.json` 并填写 `base_url`、`model`、`domain.description`；设置 `export AGENT_API_KEY=你的Key`）、运行（`./.venv/bin/python -m agent`）、退出命令说明。
+覆盖：项目简介、安装（`uv sync`）、配置（复制 `config.example.json` 为 `config.json` 并填写 `base_url`、`model`、`domain.description`；设置 `export AGENT_API_KEY=你的Key`）、运行（`uv run python -m agent`）、退出命令说明。
 
 - [ ] **Step 8: 全量回归测试**
 
-Run: `./.venv/bin/python -m pytest -v`
+Run: `uv run pytest -v`
 Expected: 全部 PASS（25 项：config 11 + llm_client 3 + classifier 5 + generator 3 + repl 4 + agent_cli 4 = 30 项，如与清单不符以实际收集为准）。
 
 - [ ] **Step 9: 端到端验证（无 API Key 时启动报错路径）**
 
-Run: `env -u AGENT_API_KEY ./.venv/bin/python -m agent`
+Run: `env -u AGENT_API_KEY uv run python -m agent`
 Expected: 退出码 1，stderr 打印 `配置错误：未设置 AGENT_API_KEY 环境变量...`（无 config.json 时则提示创建配置文件）。
 
 - [ ] **Step 10: 提交**
