@@ -71,6 +71,7 @@ agent/
 
 - 分类器以自然语言领域描述为唯一依据，由 LLM 判断问题是否在领域内。
 - 分类器提示词（英文）让 LLM 返回 JSON 结构：`{"in_domain": boolean, "reason": "string"}`。
+- 分类器调用关闭 DeepSeek V4 的 thinking（`extra_body={"thinking": {"type": "disabled"}}`），仅做快速判定，更省钱更快。回答生成仍开启 thinking。
 - 解析失败时：用更严格 prompt 重试一次；仍失败则按 `in_domain=false` 兜底处理（宁可误拒，不可越界回答），并提示"判定结果不可靠"。
 
 ## 回答生成

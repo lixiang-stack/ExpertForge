@@ -334,7 +334,7 @@ git commit -m "feat: add config loading with env overrides"
 - Produces:
   - `class LLMError(Exception)`
   - `class LLMClient`：`__init__(self, base_url: str, api_key: str, model: str, timeout: float = 60.0)` —— 内部构造 `OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)` 并保存 `model`。
-  - `LLMClient.chat_completion(self, messages: list[dict], *, model: str | None = None, temperature: float = 0.3) -> str` —— 非流式，`create(model=..., messages=..., temperature=..., stream=False)`，返回 `choices[0].message.content`。
+  - `LLMClient.chat_completion(self, messages: list[dict], *, model: str | None = None, temperature: float = 0.3, disable_thinking: bool = False) -> str` —— 非流式，`create(model=..., messages=..., temperature=..., stream=False)`；`disable_thinking=True` 时额外传 `extra_body={"thinking": {"type": "disabled"}}`（DeepSeek V4 关闭思考，分类器专用）；返回 `choices[0].message.content`。
   - `LLMClient.chat_completion_stream(self, messages: list[dict], *, model: str | None = None, temperature: float = 0.7) -> Iterator[str]` —— `create(..., stream=True)`，逐 chunk yield `choices[0].delta.content`（为空则跳过）。
   - SDK 抛出的任何 `OpenAIError` 都被包装为 `LLMError`，消息为英文：`f"LLM API call failed: {e}"`。
 - Consumes: `openai` SDK（`OpenAI`、`OpenAIError`）。
@@ -372,6 +372,20 @@ def test_chat_completion_returns_content(mock_openai):
     kwargs = mock_openai.return_value.chat.completions.create.call_args.kwargs
     assert kwargs["model"] == "model-a"
     assert kwargs["stream"] is False
+    assert "extra_body" not in kwargs
+
+
+@patch("agent.llm.OpenAI")
+def test_chat_completion_disable_thinking_passes_extra_body(mock_openai):
+    resp = MagicMock()
+    resp.choices[0].message.content = "x"
+    mock_openai.return_value.chat.completions.create.return_value = resp
+
+    client = LLMClient("https://api.example.com/v1", "key", "model-a")
+    client.chat_completion([{"role": "user", "content": "hi"}], disable_thinking=True)
+
+    kwargs = mock_openai.return_value.chat.completions.create.call_args.kwargs
+    assert kwargs["extra_body"] == {"thinking": {"type": "disabled"}}
 
 
 @patch("agent.llm.OpenAI")
@@ -427,15 +441,23 @@ class LLMClient:
         self.model = model
 
     def chat_completion(
-        self, messages: list[dict], *, model: str | None = None, temperature: float = 0.3
+        self,
+        messages: list[dict],
+        *,
+        model: str | None = None,
+        temperature: float = 0.3,
+        disable_thinking: bool = False,
     ) -> str:
         try:
-            resp = self.client.chat.completions.create(
-                model=model or self.model,
-                messages=messages,
-                temperature=temperature,
-                stream=False,
-            )
+            kwargs = {
+                "model": model or self.model,
+                "messages": messages,
+                "temperature": temperature,
+                "stream": False,
+            }
+            if disable_thinking:
+                kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+            resp = self.client.chat.completions.create(**kwargs)
             return resp.choices[0].message.content
         except OpenAIError as e:
             raise LLMError(f"LLM API call failed: {e}") from e
@@ -484,7 +506,7 @@ git commit -m "feat: wrap openai SDK client"
 - Produces:
   - `@dataclass class Classification`：`in_domain: bool`、`reason: str`
   - `def classify_question(client, question: str, domain_name: str, domain_description: str, *, model: str | None = None) -> Classification`
-    - 调用 `client.chat_completion([{"role": "system", "content": prompt}], model=model)`。
+    - 调用 `client.chat_completion([{"role": "system", "content": prompt}], model=model, disable_thinking=True)`（分类只需快速判定，关闭 DeepSeek V4 thinking）。
     - 输出解析失败时用更严格 prompt 重试一次；仍失败返回 `Classification(in_domain=False, reason="Unreliable classification: classifier output could not be parsed")`。
     - `LLMError` 向上传播（由调用方处理）。
   - 分类提示词为英文。
@@ -505,8 +527,8 @@ class FakeClient:
         self.responses = list(responses)
         self.calls = []
 
-    def chat_completion(self, messages, model=None):
-        self.calls.append((messages, model))
+    def chat_completion(self, messages, model=None, disable_thinking=False):
+        self.calls.append((messages, model, disable_thinking))
         return self.responses.pop(0)
 
 
@@ -516,6 +538,7 @@ def test_classify_in_domain():
     assert isinstance(result, Classification)
     assert result.in_domain is True
     assert result.reason == "in software engineering"
+    assert client.calls[0][2] is True
 
 
 def test_classify_out_of_domain():
@@ -541,7 +564,7 @@ def test_retry_then_fallback_reject():
 
 def test_propagates_llm_error():
     class FailingClient:
-        def chat_completion(self, messages, model=None):
+        def chat_completion(self, messages, model=None, disable_thinking=False):
             raise LLMError("boom")
 
     with pytest.raises(LLMError):
@@ -619,7 +642,7 @@ def classify_question(
     for strict in (False, True):
         prompt = _build_prompt(domain_name, domain_description, question, strict=strict)
         text = client.chat_completion(
-            [{"role": "system", "content": prompt}], model=model
+            [{"role": "system", "content": prompt}], model=model, disable_thinking=True
         )
         result = _parse_classification(text)
         if result is not None:
@@ -1077,7 +1100,7 @@ Expected: PASS（4 项）。
 - [ ] **Step 8: 全量回归测试**
 
 Run: `uv run pytest -v`
-Expected: 全部 PASS（预计 31 项：config 11 + llm 4 + classifier 5 + generator 3 + repl 4 + agent_cli 4；以实际收集为准）。
+Expected: 全部 PASS（预计 32 项：config 11 + llm 5 + classifier 5 + generator 3 + repl 4 + agent_cli 4；以实际收集为准）。
 
 - [ ] **Step 9: 端到端验证（无 API Key 时启动报错路径）**
 
