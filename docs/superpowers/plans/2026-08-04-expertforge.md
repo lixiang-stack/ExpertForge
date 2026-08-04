@@ -795,7 +795,7 @@ class FakeClient:
         self.streams = list(streams)
         self.generate_calls = []
 
-    def chat_completion(self, messages, model=None):
+    def chat_completion(self, messages, model=None, disable_thinking=False):
         return self.classifications.pop(0)
 
     def chat_completion_stream(self, messages, model=None):
@@ -839,7 +839,7 @@ def test_repl_api_error_does_not_crash(monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
 
     class ErrorClient:
-        def chat_completion(self, messages, model=None):
+        def chat_completion(self, messages, model=None, disable_thinking=False):
             raise LLMError("network error")
 
         def chat_completion_stream(self, messages, model=None):
@@ -1007,7 +1007,7 @@ def test_main_runs_repl(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
 
     class FakeClient:
-        def chat_completion(self, messages, model=None):
+        def chat_completion(self, messages, model=None, disable_thinking=False):
             return '{"in_domain": true, "reason": "ok"}'
 
         def chat_completion_stream(self, messages, model=None):
