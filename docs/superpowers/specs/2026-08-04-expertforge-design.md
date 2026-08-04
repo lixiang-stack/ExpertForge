@@ -26,9 +26,10 @@ ExpertForge 是一个**单领域可配置**的 AI 专家 Agent CLI 工具。用�
 ## 技术选型
 
 - 语言：Python
-- LLM 接口：OpenAI 兼容的 `/chat/completions` API（第三方服务）
+- LLM 接口：`openai` SDK，通过可配置的 `base_url` 指向 OpenAI 兼容的第三方服务
 - 配置：`config.json` + 环境变量（API Key 走环境变量）
 - 交互：交互式 REPL（流式输出）
+- 约定：发送给 LLM 的 prompt、通用错误与异常信息一律使用英文
 
 ## 架构与组件
 
@@ -36,7 +37,7 @@ ExpertForge 是一个**单领域可配置**的 AI 专家 Agent CLI 工具。用�
 agent/
 ├── agent_cli.py          # 入口：解析参数，启动 REPL
 ├── config.py             # 配置加载（config.json + 环境变量）
-├── llm_client.py         # OpenAI 兼容 HTTP 客户端（封装两次调用）
+├── llm.py                # openai SDK 封装（chat 与流式 chat）
 ├── classifier.py         # 领域判定：LLM 分类调用 + 结果解析
 ├── generator.py          # 回答生成：构建领域 System Prompt + 多轮历史
 ├── repl.py               # 交互式对话循环（多轮、流式输出、退出命令）
@@ -46,7 +47,7 @@ agent/
 组件职责：
 
 - **config.py**：读取 `config.json`（API 地址、模型、领域描述、拒绝语），API Key 从环境变量读取；缺失时给出友好错误。
-- **llm_client.py**：封装对 `/chat/completions` 的调用，支持流式；提供 `classify()` 和 `generate()` 两种调用。
+- **llm.py**：封装 `openai` SDK，提供 `chat_completion()`（非流式）与 `chat_completion_stream()`（流式）；将 SDK 异常统一包装为 `LLMError`。
 - **classifier.py**：用小 prompt 让 LLM 返回 JSON `{"in_domain": true/false, "reason": "..."}`，并解析。
 - **generator.py**：把领域描述 + 半结构化引导（专业、多角度、可按问题调整结构）组装成 System Prompt，带多轮历史。
 - **repl.py**：循环"输入→分类→生成/拒绝→输出"，支持流式打印和 `exit/quit` 退出。
@@ -69,7 +70,7 @@ agent/
 ## 领域判定
 
 - 分类器以自然语言领域描述为唯一依据，由 LLM 判断问题是否在领域内。
-- 分类器返回 JSON 结构：`{"in_domain": boolean, "reason": "string"}`。
+- 分类器提示词（英文）让 LLM 返回 JSON 结构：`{"in_domain": boolean, "reason": "string"}`。
 - 解析失败时：用更严格 prompt 重试一次；仍失败则按 `in_domain=false` 兜底处理（宁可误拒，不可越界回答），并提示"判定结果不可靠"。
 
 ## 回答生成
