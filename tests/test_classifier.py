@@ -34,6 +34,19 @@ def test_retry_then_success():
     result = classify_question(client, "What is Kafka?", "软件工程", "software engineering")
     assert result.in_domain is True
     assert len(client.calls) == 2
+    assert "Reminder" in client.calls[1][0][0]["content"]
+
+
+def test_string_bool_not_coerced_to_true():
+    client = FakeClient(
+        [
+            '{"in_domain": "false", "reason": "unrelated"}',
+            '{"in_domain": false, "reason": "unrelated"}',
+        ]
+    )
+    result = classify_question(client, "What is the weather?", "软件工程", "software engineering")
+    assert result.in_domain is False
+    assert len(client.calls) == 2
 
 
 def test_retry_then_fallback_reject():

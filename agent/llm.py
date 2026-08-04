@@ -32,7 +32,8 @@ class LLMClient:
             if disable_thinking:
                 kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
             resp = self.client.chat.completions.create(**kwargs)
-            return resp.choices[0].message.content
+            content = resp.choices[0].message.content
+            return content or ""
         except OpenAIError as e:
             raise LLMError(f"LLM API call failed: {e}") from e
 

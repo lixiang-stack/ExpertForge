@@ -71,3 +71,19 @@ def test_repl_blank_input_skipped(monkeypatch, capsys):
     run_repl(client, _config())
     out = capsys.readouterr().out
     assert "Bye." in out
+
+
+def test_repl_second_turn_includes_history(monkeypatch, capsys):
+    inputs = iter(["q1", "q2", "exit"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
+    client = FakeClient(
+        ['{"in_domain": true, "reason": "ok"}', '{"in_domain": true, "reason": "ok"}'],
+        ["A1", "A2"],
+    )
+    run_repl(client, _config())
+    messages = client.generate_calls[1]
+    user_contents = [m["content"] for m in messages if m["role"] == "user"]
+    assistant_contents = [m["content"] for m in messages if m["role"] == "assistant"]
+    assert "q1" in user_contents
+    assert "q2" in user_contents
+    assert "A1" in assistant_contents

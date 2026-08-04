@@ -64,6 +64,18 @@ def test_chat_completion_stream_yields_content(mock_openai):
 
 
 @patch("agent.llm.OpenAI")
+def test_chat_completion_none_content_returns_empty_string(mock_openai):
+    resp = MagicMock()
+    resp.choices[0].message.content = None
+    mock_openai.return_value.chat.completions.create.return_value = resp
+
+    client = LLMClient("https://api.example.com/v1", "key", "model-a")
+    text = client.chat_completion([{"role": "user", "content": "hi"}])
+
+    assert text == ""
+
+
+@patch("agent.llm.OpenAI")
 def test_sdk_error_wrapped_in_llm_error(mock_openai):
     mock_openai.return_value.chat.completions.create.side_effect = OpenAIError("boom")
     client = LLMClient("https://api.example.com/v1", "key", "model-a")

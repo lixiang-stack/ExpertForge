@@ -43,9 +43,11 @@ def _parse_classification(text: str) -> Classification | None:
         return None
     if not isinstance(data, dict) or "in_domain" not in data:
         return None
+    if not isinstance(data["in_domain"], bool):
+        return None
     reason = data.get("reason")
     return Classification(
-        in_domain=bool(data["in_domain"]),
+        in_domain=data["in_domain"],
         reason=reason if isinstance(reason, str) else "",
     )
 
