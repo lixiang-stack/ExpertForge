@@ -2,7 +2,16 @@ import json
 
 import pytest
 
-from agent.config import AgentConfig, ConfigError, get_api_key, load_config
+from agent.config import (
+    AgentConfig,
+    ConfigError,
+    DomainConfig,
+    IntentDef,
+    StrategyDef,
+    get_api_key,
+    load_config,
+    load_domain_config,
+)
 
 
 def _write_config(tmp_path, data):
@@ -92,3 +101,121 @@ def test_get_api_key_missing(monkeypatch):
     monkeypatch.delenv("AGENT_API_KEY", raising=False)
     with pytest.raises(ConfigError):
         get_api_key()
+
+
+def _write_domain(tmp_path, **overrides):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(json.dumps({
+        "name": "软件工程",
+        "description": "software engineering",
+        "out_of_domain_reply": "Out of domain.",
+    }, ensure_ascii=False), encoding="utf-8")
+    (base / "intents.yaml").write_text(
+        "- id: concept_explain\n  description: explain a concept\n"
+        "- id: faq\n  description: quick question\n  needs_clarification: true\n",
+        encoding="utf-8",
+    )
+    (base / "intent_mapping.yaml").write_text(
+        "concept_explain: teaching\nfaq: direct\n", encoding="utf-8"
+    )
+    (base / "strategies.yaml").write_text(
+        "teaching:\n  complexity_gate: true\ndirect:\n  model: model-direct\n",
+        encoding="utf-8",
+    )
+    (base / "prompts" / "teaching.md").write_text(
+        "teach {name} {description} {structure}", encoding="utf-8"
+    )
+    (base / "prompts" / "direct.md").write_text(
+        "direct {name} {description} {structure}", encoding="utf-8"
+    )
+    (base / "prompts" / "clarify.md").write_text("clarify", encoding="utf-8")
+    (base / "prompts" / "unsupported_complex.md").write_text("unsupported", encoding="utf-8")
+    return str(base)
+
+
+def test_load_domain_config_basic(tmp_path):
+    domain = load_domain_config(_write_domain(tmp_path))
+    assert isinstance(domain, DomainConfig)
+    assert domain.name == "软件工程"
+    assert domain.description == "software engineering"
+    assert domain.out_of_domain_reply == "Out of domain."
+    assert set(domain.intents) == {"concept_explain", "faq"}
+    assert domain.intents["faq"].needs_clarification is True
+    assert domain.intents["concept_explain"].needs_clarification is False
+    assert domain.intent_mapping == {"concept_explain": "teaching", "faq": "direct"}
+    assert domain.strategies["teaching"].complexity_gate is True
+    assert domain.strategies["direct"].model == "model-direct"
+    assert domain.strategies["direct"].complexity_gate is False
+    assert "teach {name}" in domain.prompts["teaching"]
+    assert "clarify" in domain.prompts["clarify"]
+    assert "unsupported" in domain.prompts["unsupported_complex"]
+
+
+def test_load_domain_config_out_of_domain_reply_default(tmp_path):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(
+        json.dumps({"name": "软件工程", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text("", encoding="utf-8")
+    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
+    (base / "strategies.yaml").write_text("", encoding="utf-8")
+    (base / "prompts" / "clarify.md").write_text("c", encoding="utf-8")
+    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
+    domain = load_domain_config(str(base))
+    assert domain.out_of_domain_reply == (
+        "This question falls outside my expert domain (软件工程) "
+        "and I cannot provide a professional answer."
+    )
+
+
+def test_load_domain_config_missing_domain_json(tmp_path):
+    with pytest.raises(ConfigError):
+        load_domain_config(str(tmp_path / "no-such-dir"))
+
+
+def test_load_domain_config_bad_yaml(tmp_path):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(
+        json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text(":: not: [valid", encoding="utf-8")
+    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
+    (base / "strategies.yaml").write_text("", encoding="utf-8")
+    (base / "prompts" / "clarify.md").write_text("c", encoding="utf-8")
+    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_domain_config(str(base))
+
+
+def test_load_domain_config_mapping_unknown_intent(tmp_path):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(
+        json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text("- id: faq\n  description: q\n", encoding="utf-8")
+    (base / "intent_mapping.yaml").write_text("bogus_intent: direct\n", encoding="utf-8")
+    (base / "strategies.yaml").write_text("direct:\n", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d {structure}", encoding="utf-8")
+    (base / "prompts" / "clarify.md").write_text("c", encoding="utf-8")
+    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_domain_config(str(base))
+
+
+def test_load_domain_config_missing_prompt(tmp_path):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(
+        json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text("- id: faq\n  description: q\n", encoding="utf-8")
+    (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
+    (base / "strategies.yaml").write_text("direct:\n", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d {structure}", encoding="utf-8")
+    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_domain_config(str(base))
