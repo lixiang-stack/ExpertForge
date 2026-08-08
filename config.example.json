@@ -2,9 +2,5 @@
   "base_url": "https://api.deepseek.com",
   "model": "deepseek-v4-flash",
   "classifier_model": "deepseek-v4-flash",
-  "domain": {
-    "name": "Software Engineering",
-    "description": "Covers software design, development, testing, operations, and performance optimization.",
-    "out_of_domain_reply": "This question falls outside my expert domain (Software Engineering) and I cannot provide a professional answer."
-  }
+  "domain_dir": "domain/software_engineering"
 }

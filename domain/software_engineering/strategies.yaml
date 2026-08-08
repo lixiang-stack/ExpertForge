@@ -1,0 +1,15 @@
+direct:
+  model: null
+  complexity_gate: false
+teaching:
+  model: null
+  complexity_gate: true
+debugging:
+  model: null
+  complexity_gate: true
+analysis:
+  model: null
+  complexity_gate: true
+coding:
+  model: null
+  complexity_gate: true
