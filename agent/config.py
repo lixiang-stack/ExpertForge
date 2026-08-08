@@ -29,10 +29,7 @@ def _read_json_file(path: str) -> dict:
         with open(path, encoding="utf-8") as f:
             raw = json.load(f)
     except FileNotFoundError:
-        raise ConfigError(
-            f"Config file not found: {path}. "
-            "Create one by copying config.example.json."
-        )
+        raise ConfigError(f"Config file not found: {path}.")
     except json.JSONDecodeError as e:
         raise ConfigError(f"Invalid config JSON: {e}")
     if not isinstance(raw, dict):
@@ -45,7 +42,12 @@ def _load_config_dict(path: str | None, default_path: str) -> dict:
         return _read_json_file(path)
     if os.path.isfile(default_path):
         return _read_json_file(default_path)
-    return _read_json_file(DEFAULT_EXAMPLE_CONFIG_PATH)
+    if os.path.isfile(DEFAULT_EXAMPLE_CONFIG_PATH):
+        return _read_json_file(DEFAULT_EXAMPLE_CONFIG_PATH)
+    raise ConfigError(
+        f"Config file not found: {default_path}. "
+        "Create one by copying config.example.json."
+    )
 
 
 def load_config(path: str | None = None) -> AgentConfig:

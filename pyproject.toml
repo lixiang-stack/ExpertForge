@@ -1,7 +1,7 @@
 [project]
 name = "expertforge"
 version = "0.1.0"
-description = "Single-domain configurable AI expert agent CLI"
+description = "Configurable multi-domain AI expert agent CLI with strategy routing"
 requires-python = ">=3.10"
 dependencies = [
     "openai>=1.0",
