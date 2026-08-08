@@ -1,6 +1,11 @@
 import pytest
 
-from agent.classifier import Classification, classify_question
+from agent.classifier import (
+    Classification,
+    classify_complexity,
+    classify_intent,
+    classify_question,
+)
 from agent.llm import LLMError
 
 
@@ -64,3 +69,49 @@ def test_propagates_llm_error():
 
     with pytest.raises(LLMError):
         classify_question(FailingClient(), "q", "软件工程", "software engineering")
+
+
+def test_classify_intent_success():
+    client = FakeClient(['{"intent": "concept_explain", "reason": "why"}'])
+    result = classify_intent(client, "why is interface like this", "软件工程", "sw", ["concept_explain", "faq"])
+    assert result.intent_id == "concept_explain"
+    assert result.reason == "why"
+    assert client.calls[0][2] is True
+
+
+def test_classify_intent_unknown_retries():
+    client = FakeClient(
+        ['{"intent": "bogus", "reason": "x"}', '{"intent": "faq", "reason": "y"}']
+    )
+    result = classify_intent(client, "q", "软件工程", "sw", ["concept_explain", "faq"])
+    assert result.intent_id == "faq"
+    assert len(client.calls) == 2
+
+
+def test_classify_intent_unreliable_falls_back_empty():
+    client = FakeClient(["garbage", "garbage"])
+    result = classify_intent(client, "q", "软件工程", "sw", ["concept_explain", "faq"])
+    assert result.intent_id == ""
+    assert "Unreliable" in result.reason
+    assert len(client.calls) == 2
+
+
+def test_classify_complexity_success():
+    client = FakeClient(['{"complexity": "complex", "reason": "big scope"}'])
+    result = classify_complexity(client, "design a redis cluster", "软件工程", "sw")
+    assert result.level == "complex"
+
+
+def test_classify_complexity_invalid_level_retries():
+    client = FakeClient(
+        ['{"complexity": "huge", "reason": "x"}', '{"complexity": "medium", "reason": "y"}']
+    )
+    result = classify_complexity(client, "q", "软件工程", "sw")
+    assert result.level == "medium"
+    assert len(client.calls) == 2
+
+
+def test_classify_complexity_unreliable_defaults_medium():
+    client = FakeClient(["garbage", "garbage"])
+    result = classify_complexity(client, "q", "软件工程", "sw")
+    assert result.level == "medium"
