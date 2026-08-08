@@ -16,21 +16,15 @@ def test_load_config_basic(tmp_path, monkeypatch):
     path = _write_config(tmp_path, {
         "base_url": "https://api.example.com/v1",
         "model": "model-a",
-        "classifier_model": None,
-        "domain": {
-            "name": "软件工程",
-            "description": "软件工程相关技术问题",
-            "out_of_domain_reply": "Not supported.",
-        },
+        "classifier_model": "classifier-a",
+        "domain_dir": "domain/software_engineering",
     })
     cfg = load_config(path)
     assert isinstance(cfg, AgentConfig)
     assert cfg.base_url == "https://api.example.com/v1"
     assert cfg.model == "model-a"
-    assert cfg.classifier_model == "model-a"
-    assert cfg.domain_name == "软件工程"
-    assert cfg.domain_description == "软件工程相关技术问题"
-    assert cfg.out_of_domain_reply == "Not supported."
+    assert cfg.classifier_model == "classifier-a"
+    assert cfg.domain_dir == "domain/software_engineering"
 
 
 def test_classifier_model_falls_back_to_model(tmp_path, monkeypatch):
@@ -38,14 +32,10 @@ def test_classifier_model_falls_back_to_model(tmp_path, monkeypatch):
     path = _write_config(tmp_path, {
         "base_url": "https://api.example.com/v1",
         "model": "model-a",
-        "domain": {"name": "软件工程", "description": "软件工程相关"},
+        "domain_dir": "domain/software_engineering",
     })
     cfg = load_config(path)
     assert cfg.classifier_model == "model-a"
-    assert cfg.out_of_domain_reply == (
-        "This question falls outside my expert domain (软件工程) "
-        "and I cannot provide a professional answer."
-    )
 
 
 def test_env_base_url_overrides_file(tmp_path, monkeypatch):
@@ -53,7 +43,7 @@ def test_env_base_url_overrides_file(tmp_path, monkeypatch):
     path = _write_config(tmp_path, {
         "base_url": "https://file.example.com/v1",
         "model": "m",
-        "domain": {"description": "x"},
+        "domain_dir": "domain/software_engineering",
     })
     cfg = load_config(path)
     assert cfg.base_url == "https://env.example.com/v1"
@@ -74,21 +64,21 @@ def test_invalid_json_raises(tmp_path, monkeypatch):
 
 def test_missing_base_url_raises(tmp_path, monkeypatch):
     monkeypatch.delenv("AGENT_BASE_URL", raising=False)
-    path = _write_config(tmp_path, {"model": "m", "domain": {"description": "x"}})
+    path = _write_config(tmp_path, {"model": "m", "domain_dir": "d"})
     with pytest.raises(ConfigError):
         load_config(path)
 
 
 def test_missing_model_raises(tmp_path, monkeypatch):
     monkeypatch.delenv("AGENT_BASE_URL", raising=False)
-    path = _write_config(tmp_path, {"base_url": "https://x/v1", "domain": {"description": "x"}})
+    path = _write_config(tmp_path, {"base_url": "https://x/v1", "domain_dir": "d"})
     with pytest.raises(ConfigError):
         load_config(path)
 
 
-def test_missing_domain_description_raises(tmp_path, monkeypatch):
+def test_missing_domain_dir_raises(tmp_path, monkeypatch):
     monkeypatch.delenv("AGENT_BASE_URL", raising=False)
-    path = _write_config(tmp_path, {"base_url": "https://x/v1", "model": "m", "domain": {}})
+    path = _write_config(tmp_path, {"base_url": "https://x/v1", "model": "m"})
     with pytest.raises(ConfigError):
         load_config(path)
 

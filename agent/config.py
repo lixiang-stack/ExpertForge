@@ -17,9 +17,7 @@ class AgentConfig:
     base_url: str
     model: str
     classifier_model: str
-    domain_name: str
-    domain_description: str
-    out_of_domain_reply: str
+    domain_dir: str
 
 
 def load_config(path: str | None = None) -> AgentConfig:
@@ -48,27 +46,15 @@ def load_config(path: str | None = None) -> AgentConfig:
 
     classifier_model = raw.get("classifier_model") or model
 
-    domain = raw.get("domain")
-    if not isinstance(domain, dict):
-        raise ConfigError("Missing 'domain' in config.")
-
-    domain_name = domain.get("name") or ""
-    domain_description = domain.get("description")
-    if not domain_description:
-        raise ConfigError("Missing 'domain.description' in config.")
-
-    out_of_domain_reply = domain.get("out_of_domain_reply") or (
-        f"This question falls outside my expert domain ({domain_name}) "
-        "and I cannot provide a professional answer."
-    )
+    domain_dir = raw.get("domain_dir")
+    if not isinstance(domain_dir, str) or not domain_dir:
+        raise ConfigError("Missing 'domain_dir' in config.")
 
     return AgentConfig(
         base_url=base_url,
         model=model,
         classifier_model=classifier_model,
-        domain_name=domain_name,
-        domain_description=domain_description,
-        out_of_domain_reply=out_of_domain_reply,
+        domain_dir=domain_dir,
     )
 
 
