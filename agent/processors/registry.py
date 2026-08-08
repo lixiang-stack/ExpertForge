@@ -21,4 +21,5 @@ def build_registry(domain: DomainConfig) -> dict[str, Processor]:
     return {
         sid: cls(domain.prompts[sid], domain.name, domain.description)
         for sid, cls in PROCESSOR_CLASSES.items()
+        if sid in domain.prompts
     }
