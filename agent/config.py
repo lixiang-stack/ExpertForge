@@ -13,6 +13,7 @@ class ConfigError(Exception):
 
 
 DEFAULT_CONFIG_PATH = "config.json"
+DEFAULT_EXAMPLE_CONFIG_PATH = "config.example.json"
 
 
 @dataclass
@@ -23,21 +24,33 @@ class AgentConfig:
     domain_dir: str
 
 
-def load_config(path: str | None = None) -> AgentConfig:
-    config_path = path or DEFAULT_CONFIG_PATH
+def _read_json_file(path: str) -> dict:
     try:
-        with open(config_path, encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             raw = json.load(f)
     except FileNotFoundError:
         raise ConfigError(
-            f"Config file not found: {config_path}. "
+            f"Config file not found: {path}. "
             "Create one by copying config.example.json."
         )
     except json.JSONDecodeError as e:
         raise ConfigError(f"Invalid config JSON: {e}")
-
     if not isinstance(raw, dict):
         raise ConfigError("Config top-level must be a JSON object.")
+    return raw
+
+
+def _load_config_dict(path: str | None, default_path: str) -> dict:
+    if path:
+        return _read_json_file(path)
+    if os.path.isfile(default_path):
+        return _read_json_file(default_path)
+    return _read_json_file(DEFAULT_EXAMPLE_CONFIG_PATH)
+
+
+def load_config(path: str | None = None) -> AgentConfig:
+    config_path = path or DEFAULT_CONFIG_PATH
+    raw = _load_config_dict(path, config_path)
 
     base_url = os.environ.get("AGENT_BASE_URL") or raw.get("base_url")
     if not base_url:

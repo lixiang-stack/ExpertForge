@@ -63,6 +63,38 @@ def test_missing_file_raises():
         load_config("/nonexistent/path/config.json")
 
 
+def test_default_config_falls_back_to_example(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "config.example.json").write_text(json.dumps({
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+    }), encoding="utf-8")
+    cfg = load_config()
+    assert cfg.base_url == "https://api.example.com/v1"
+    assert cfg.domain_dir == "domain/software_engineering"
+
+
+def test_default_config_no_fallback_raises(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ConfigError):
+        load_config()
+
+
+def test_explicit_missing_path_no_fallback(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "config.example.json").write_text(json.dumps({
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "d",
+    }), encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(str(tmp_path / "config.json"))
+
+
 def test_invalid_json_raises(tmp_path, monkeypatch):
     monkeypatch.delenv("AGENT_BASE_URL", raising=False)
     path = tmp_path / "config.json"
