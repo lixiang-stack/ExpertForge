@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from .config import AgentConfig, DomainConfig
 from .llm import LLMClient
+from .model_router import resolve_model
 from .processors.registry import build_registry
 from .router import COMPLEX_UNSUPPORTED, Router
 
@@ -37,10 +38,7 @@ class Chat:
         processor = self.processors.get(route.strategy)
         if processor is None:
             return ChatResponse(kind="error", text=f"No processor for strategy '{route.strategy}'")
-        model = self.config.model
-        strategy_def = self.domain.strategies.get(route.strategy)
-        if strategy_def and strategy_def.model:
-            model = strategy_def.model
+        model = resolve_model(self.config, self.domain, route, self.config.model)
         answer = processor.process(self.client, question, self.history, model=model)
         self.history.append((question, answer))
         return ChatResponse(kind="answer", text=answer)

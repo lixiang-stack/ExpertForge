@@ -31,10 +31,12 @@ def _config():
 class FakeClient:
     def __init__(self, responses):
         self.responses = list(responses)
+        self.models = []
 
     def chat_completion(
         self, messages, model=None, disable_thinking=False, json_mode=False, json_schema=None
     ):
+        self.models.append(model)
         return self.responses.pop(0)
 
 
@@ -67,3 +69,17 @@ def test_respond_unsupported_complex():
     resp = chat.respond("huge debugging task")
     assert resp.kind == "unsupported"
     assert resp.text == "Needs orchestrator."
+
+
+def test_respond_uses_complexity_routed_model():
+    client = FakeClient([
+        '{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}',
+        "the answer",
+    ])
+    chat = Chat(client, AgentConfig(base_url="https://x", model="m", classifier_model="cm",
+                                    domain_dir="d", model_low="low-a", model_high="high-a"),
+                _domain())
+    resp = chat.respond("what is defer")
+    assert resp.kind == "answer"
+    # first call: classification (model=cm); second call: generator (model=low)
+    assert client.models == ["cm", "low-a"]

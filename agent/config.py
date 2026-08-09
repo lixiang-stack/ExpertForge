@@ -22,6 +22,8 @@ class AgentConfig:
     model: str
     classifier_model: str
     domain_dir: str
+    model_low: str | None = None
+    model_high: str | None = None
 
 
 def _read_json_file(path: str) -> dict:
@@ -62,7 +64,12 @@ def load_config(path: str | None = None) -> AgentConfig:
     if not model:
         raise ConfigError("Missing 'model' in config.")
 
-    classifier_model = raw.get("classifier_model") or model
+    model_low = raw.get("model_low")
+    model_high = raw.get("model_high")
+    model_low = model_low if isinstance(model_low, str) and model_low else None
+    model_high = model_high if isinstance(model_high, str) and model_high else None
+
+    classifier_model = model_low or model
 
     domain_dir = raw.get("domain_dir")
     if not isinstance(domain_dir, str) or not domain_dir:
@@ -73,6 +80,8 @@ def load_config(path: str | None = None) -> AgentConfig:
         model=model,
         classifier_model=classifier_model,
         domain_dir=domain_dir,
+        model_low=model_low,
+        model_high=model_high,
     )
 
 

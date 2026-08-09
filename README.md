@@ -22,10 +22,12 @@ cp config.example.json config.json
 Edit `config.json`:
 
 - `base_url`: the OpenAI-compatible API base URL.
-- `model`: the model to use for answers.
-- `classifier_model`: the model used for domain/intent/complexity classification
-  (falls back to `model` if omitted).
+- `model`: the base model, used for answers unless overridden below.
+- `model_low`: low-cost model tier for `simple` questions (falls back to `model`).
+- `model_high`: high-capability model tier for `medium`/`complex` questions (falls back to `model`).
 - `domain_dir`: path to your domain directory (see below).
+
+`classifier_model` is no longer configured — classification uses `model_low` (falling back to `model`).
 
 Then set your API key:
 
