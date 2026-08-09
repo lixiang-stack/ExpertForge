@@ -21,6 +21,7 @@ class LLMClient:
         model: str | None = None,
         temperature: float = 0.3,
         disable_thinking: bool = False,
+        json_mode: bool = False,
     ) -> str:
         try:
             kwargs = {
@@ -29,6 +30,8 @@ class LLMClient:
                 "temperature": temperature,
                 "stream": False,
             }
+            if json_mode:
+                kwargs["response_format"] = {"type": "json_object"}
             if disable_thinking:
                 kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
             resp = self.client.chat.completions.create(**kwargs)

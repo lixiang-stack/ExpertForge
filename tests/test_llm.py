@@ -81,3 +81,29 @@ def test_sdk_error_wrapped_in_llm_error(mock_openai):
     client = LLMClient("https://api.example.com/v1", "key", "model-a")
     with pytest.raises(LLMError):
         client.chat_completion([{"role": "user", "content": "hi"}])
+
+
+@patch("agent.llm.OpenAI")
+def test_chat_completion_json_mode_passes_response_format(mock_openai):
+    resp = MagicMock()
+    resp.choices[0].message.content = "{}"
+    mock_openai.return_value.chat.completions.create.return_value = resp
+
+    client = LLMClient("https://api.example.com/v1", "key", "model-a")
+    client.chat_completion([{"role": "user", "content": "hi"}], json_mode=True)
+
+    kwargs = mock_openai.return_value.chat.completions.create.call_args.kwargs
+    assert kwargs["response_format"] == {"type": "json_object"}
+
+
+@patch("agent.llm.OpenAI")
+def test_chat_completion_json_mode_off_by_default(mock_openai):
+    resp = MagicMock()
+    resp.choices[0].message.content = "x"
+    mock_openai.return_value.chat.completions.create.return_value = resp
+
+    client = LLMClient("https://api.example.com/v1", "key", "model-a")
+    client.chat_completion([{"role": "user", "content": "hi"}])
+
+    kwargs = mock_openai.return_value.chat.completions.create.call_args.kwargs
+    assert "response_format" not in kwargs
