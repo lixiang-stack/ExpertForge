@@ -25,15 +25,79 @@ def test_load_config_basic(tmp_path, monkeypatch):
     path = _write_config(tmp_path, {
         "base_url": "https://api.example.com/v1",
         "model": "model-a",
-        "classifier_model": "classifier-a",
         "domain_dir": "domain/software_engineering",
     })
     cfg = load_config(path)
     assert isinstance(cfg, AgentConfig)
     assert cfg.base_url == "https://api.example.com/v1"
     assert cfg.model == "model-a"
-    assert cfg.classifier_model == "classifier-a"
+    assert cfg.classifier_model == "model-a"
     assert cfg.domain_dir == "domain/software_engineering"
+
+
+def test_load_config_model_tiers(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "model_low": "low-a",
+        "model_high": "high-a",
+        "domain_dir": "domain/software_engineering",
+    })
+    cfg = load_config(path)
+    assert cfg.model_low == "low-a"
+    assert cfg.model_high == "high-a"
+
+
+def test_model_tiers_empty_string_become_none(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "model_low": "",
+        "model_high": "",
+        "domain_dir": "domain/software_engineering",
+    })
+    cfg = load_config(path)
+    assert cfg.model_low is None
+    assert cfg.model_high is None
+
+
+def test_model_tiers_absent_become_none(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+    })
+    cfg = load_config(path)
+    assert cfg.model_low is None
+    assert cfg.model_high is None
+
+
+def test_classifier_model_derives_from_model_low(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "model_low": "low-a",
+        "domain_dir": "domain/software_engineering",
+    })
+    cfg = load_config(path)
+    assert cfg.classifier_model == "low-a"
+
+
+def test_legacy_classifier_model_entry_ignored(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "classifier_model": "legacy-a",
+        "model_low": "low-a",
+        "domain_dir": "domain/software_engineering",
+    })
+    cfg = load_config(path)
+    assert cfg.classifier_model == "low-a"  # legacy key ignored
 
 
 def test_classifier_model_falls_back_to_model(tmp_path, monkeypatch):
