@@ -3,15 +3,15 @@ from __future__ import annotations
 from .base import Processor
 
 
-class CodingProcessor(Processor):
-    strategy_id = "coding"
+class CodeSnippetProcessor(Processor):
+    strategy_id = "code_snippet"
 
     @property
     def structure(self) -> str:
         return (
             "Answer in this structure:\n"
             "- Approach\n"
-            "- Code with inline explanation\n"
-            "- Key considerations\n"
-            "- Best practices"
+            "- Code snippet\n"
+            "- Key points and caveats\n"
+            "- How to extend or adapt it"
         )

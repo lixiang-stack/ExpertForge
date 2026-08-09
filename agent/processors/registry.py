@@ -3,7 +3,7 @@ from __future__ import annotations
 from ..config import DomainConfig
 from .analysis import AnalysisProcessor
 from .base import Processor
-from .coding import CodingProcessor
+from .code_snippet import CodeSnippetProcessor
 from .debugging import DebuggingProcessor
 from .direct import DirectAnswerProcessor
 from .teaching import TeachingProcessor
@@ -13,7 +13,7 @@ PROCESSOR_CLASSES = {
     "teaching": TeachingProcessor,
     "debugging": DebuggingProcessor,
     "analysis": AnalysisProcessor,
-    "coding": CodingProcessor,
+    "code_snippet": CodeSnippetProcessor,
 }
 
 

@@ -1,6 +1,6 @@
 from agent.config import DomainConfig, IntentDef, StrategyDef
 from agent.processors.analysis import AnalysisProcessor
-from agent.processors.coding import CodingProcessor
+from agent.processors.code_snippet import CodeSnippetProcessor
 from agent.processors.debugging import DebuggingProcessor
 from agent.processors.direct import DirectAnswerProcessor
 from agent.processors.registry import build_registry
@@ -13,7 +13,7 @@ def _prompts():
         "teaching": "Teach {name} {description} {structure}",
         "debugging": "Debug {name} {description} {structure}",
         "analysis": "Analyze {name} {description} {structure}",
-        "coding": "Code {name} {description} {structure}",
+        "code_snippet": "Code {name} {description} {structure}",
     }
 
 
@@ -62,8 +62,8 @@ def test_analysis_structure():
     assert "Trade-offs" in p.build_system_prompt()
 
 
-def test_coding_structure():
-    p = CodingProcessor("X {structure}", "软件工程", "sw")
+def test_code_snippet_structure():
+    p = CodeSnippetProcessor("X {structure}", "软件工程", "sw")
     assert "Approach" in p.build_system_prompt()
 
 
@@ -82,6 +82,6 @@ def test_process_single_call_returns_string():
 
 def test_build_registry():
     registry = build_registry(_domain())
-    assert set(registry) == {"direct", "teaching", "debugging", "analysis", "coding"}
+    assert set(registry) == {"direct", "teaching", "debugging", "analysis", "code_snippet"}
     assert isinstance(registry["teaching"], TeachingProcessor)
     assert registry["direct"].build_system_prompt() == "Direct 软件工程 sw "

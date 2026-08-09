@@ -7,5 +7,5 @@ troubleshooting: debugging
 comparison: analysis
 performance_analysis: analysis
 architecture_design: analysis
-generate_code: coding
-code_review: coding
+generate_code: code_snippet
+code_review: analysis
