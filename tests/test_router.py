@@ -68,7 +68,6 @@ def test_route_unknown_intent_defaults_to_direct():
     client = FakeClient([
         '{"in_domain": true, "reason": "ok"}',
         '{"intent": "", "reason": "unreliable"}',
-        '{"intent": "", "reason": "unreliable"}',
         '{"complexity": "simple", "reason": "ok"}',
     ])
     result = Router(client, _config(), _domain()).route("q")

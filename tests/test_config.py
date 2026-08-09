@@ -241,5 +241,6 @@ def test_load_domain_config_missing_prompt(tmp_path):
     (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
     (base / "strategies.yaml").write_text("direct:\n", encoding="utf-8")
     (base / "prompts" / "direct.md").write_text("d {structure}", encoding="utf-8")
-    with pytest.raises(ConfigError):
+    with pytest.raises(ConfigError) as exc_info:
         load_domain_config(str(base))
+    assert "unsupported_complex.md" in str(exc_info.value)
