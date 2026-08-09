@@ -10,7 +10,7 @@ def _domain(**overrides):
         "intents": {
             "concept_explain": IntentDef("concept_explain", "explain"),
             "faq": IntentDef("faq", "quick"),
-            "troubleshooting": IntentDef("troubleshooting", "debug", needs_clarification=True),
+            "troubleshooting": IntentDef("troubleshooting", "debug"),
             "architecture_design": IntentDef("architecture_design", "arch"),
         },
         "intent_mapping": {
@@ -54,7 +54,6 @@ def test_route_in_domain_simple_strategy():
     assert result.strategy == "teaching"
     assert result.intent == "concept_explain"
     assert result.complexity == "simple"
-    assert result.needs_clarification is False
 
 
 def test_route_out_of_domain():
@@ -76,16 +75,6 @@ def test_route_unknown_intent_defaults_to_direct():
     assert result.strategy == "direct"
 
 
-def test_route_needs_clarification():
-    client = FakeClient([
-        '{"in_domain": true, "reason": "ok"}',
-        '{"intent": "troubleshooting", "reason": "ok"}',
-        '{"complexity": "medium", "reason": "ok"}',
-    ])
-    result = Router(client, _config(), _domain()).route("my program hangs")
-    assert result.needs_clarification is True
-
-
 def test_route_complex_gated_to_unsupported():
     client = FakeClient([
         '{"in_domain": true, "reason": "ok"}',
@@ -94,7 +83,6 @@ def test_route_complex_gated_to_unsupported():
     ])
     result = Router(client, _config(), _domain()).route("design a big system")
     assert result.strategy == COMPLEX_UNSUPPORTED
-    assert result.needs_clarification is False
 
 
 def test_route_complex_ungated_strategy_stays():

@@ -22,9 +22,8 @@ class Chat:
         self.router = Router(client, config, domain)
         self.processors = build_registry(domain)
         self.history: list[tuple[str, str]] = []
-        self._pending: str | None = None
 
-    def respond(self, question: str, *, allow_clarification: bool = True) -> ChatResponse:
+    def respond(self, question: str) -> ChatResponse:
         route = self.router.route(question)
         if not route.in_domain:
             text = self.domain.out_of_domain_reply
@@ -34,11 +33,6 @@ class Chat:
         if route.strategy == COMPLEX_UNSUPPORTED:
             return ChatResponse(
                 kind="unsupported", text=self.domain.prompts["unsupported_complex"]
-            )
-        if route.needs_clarification and allow_clarification:
-            self._pending = question
-            return ChatResponse(
-                kind="clarification", text=self._ask_clarification(question, route)
             )
         processor = self.processors.get(route.strategy)
         if processor is None:
@@ -50,23 +44,3 @@ class Chat:
         answer = processor.process(self.client, question, self.history, model=model)
         self.history.append((question, answer))
         return ChatResponse(kind="answer", text=answer)
-
-    def answer_clarification(self, supplementary: str) -> ChatResponse:
-        pending = self._pending
-        self._pending = None
-        if pending is None:
-            return ChatResponse(kind="answer", text="")
-        merged = pending + "\n\nAdditional context: " + supplementary
-        return self.respond(merged, allow_clarification=False)
-
-    def _ask_clarification(self, question: str, route) -> str:
-        prompt = self.domain.prompts["clarify"].format(
-            question=question,
-            intent=route.intent or "unknown",
-            complexity=route.complexity or "unknown",
-        )
-        return self.client.chat_completion(
-            [{"role": "system", "content": prompt}],
-            model=self.config.classifier_model,
-            disable_thinking=True,
-        )

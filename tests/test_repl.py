@@ -17,7 +17,6 @@ def _domain():
         strategies={"direct": StrategyDef("direct")},
         prompts={
             "direct": "Direct {name} {description} {structure}",
-            "clarify": "clarify",
             "unsupported_complex": "unsupported",
         },
     )

@@ -25,7 +25,6 @@ def _write_domain(tmp_path):
     (base / "prompts" / "direct.md").write_text(
         "Direct {name} {description} {structure}", encoding="utf-8"
     )
-    (base / "prompts" / "clarify.md").write_text("clarify", encoding="utf-8")
     (base / "prompts" / "unsupported_complex.md").write_text("unsupported", encoding="utf-8")
     return str(base)
 

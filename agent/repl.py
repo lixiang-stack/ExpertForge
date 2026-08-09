@@ -26,17 +26,6 @@ def run_repl(client: LLMClient, config: AgentConfig, domain: DomainConfig) -> No
 
         try:
             response = chat.respond(question)
-            if response.kind == "clarification":
-                print("expert > " + response.text)
-                try:
-                    supplementary = input("you > ").strip()
-                except EOFError:
-                    print("\nBye.")
-                    break
-                except KeyboardInterrupt:
-                    print("\nBye.")
-                    break
-                response = chat.answer_clarification(supplementary)
             print("expert > " + response.text)
         except LLMError as e:
             print(f"[error] {e}")

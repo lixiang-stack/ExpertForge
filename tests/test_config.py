@@ -145,7 +145,7 @@ def _write_domain(tmp_path, **overrides):
     }, ensure_ascii=False), encoding="utf-8")
     (base / "intents.yaml").write_text(
         "- id: concept_explain\n  description: explain a concept\n"
-        "- id: faq\n  description: quick question\n  needs_clarification: true\n",
+        "- id: faq\n  description: quick question\n",
         encoding="utf-8",
     )
     (base / "intent_mapping.yaml").write_text(
@@ -161,7 +161,6 @@ def _write_domain(tmp_path, **overrides):
     (base / "prompts" / "direct.md").write_text(
         "direct {name} {description} {structure}", encoding="utf-8"
     )
-    (base / "prompts" / "clarify.md").write_text("clarify", encoding="utf-8")
     (base / "prompts" / "unsupported_complex.md").write_text("unsupported", encoding="utf-8")
     return str(base)
 
@@ -173,14 +172,11 @@ def test_load_domain_config_basic(tmp_path):
     assert domain.description == "software engineering"
     assert domain.out_of_domain_reply == "Out of domain."
     assert set(domain.intents) == {"concept_explain", "faq"}
-    assert domain.intents["faq"].needs_clarification is True
-    assert domain.intents["concept_explain"].needs_clarification is False
     assert domain.intent_mapping == {"concept_explain": "teaching", "faq": "direct"}
     assert domain.strategies["teaching"].complexity_gate is True
     assert domain.strategies["direct"].model == "model-direct"
     assert domain.strategies["direct"].complexity_gate is False
     assert "teach {name}" in domain.prompts["teaching"]
-    assert "clarify" in domain.prompts["clarify"]
     assert "unsupported" in domain.prompts["unsupported_complex"]
 
 
@@ -193,7 +189,6 @@ def test_load_domain_config_out_of_domain_reply_default(tmp_path):
     (base / "intents.yaml").write_text("", encoding="utf-8")
     (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
     (base / "strategies.yaml").write_text("", encoding="utf-8")
-    (base / "prompts" / "clarify.md").write_text("c", encoding="utf-8")
     (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
     domain = load_domain_config(str(base))
     assert domain.out_of_domain_reply == (
@@ -216,7 +211,6 @@ def test_load_domain_config_bad_yaml(tmp_path):
     (base / "intents.yaml").write_text(":: not: [valid", encoding="utf-8")
     (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
     (base / "strategies.yaml").write_text("", encoding="utf-8")
-    (base / "prompts" / "clarify.md").write_text("c", encoding="utf-8")
     (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
     with pytest.raises(ConfigError):
         load_domain_config(str(base))
@@ -232,7 +226,6 @@ def test_load_domain_config_mapping_unknown_intent(tmp_path):
     (base / "intent_mapping.yaml").write_text("bogus_intent: direct\n", encoding="utf-8")
     (base / "strategies.yaml").write_text("direct:\n", encoding="utf-8")
     (base / "prompts" / "direct.md").write_text("d {structure}", encoding="utf-8")
-    (base / "prompts" / "clarify.md").write_text("c", encoding="utf-8")
     (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
     with pytest.raises(ConfigError):
         load_domain_config(str(base))
@@ -248,6 +241,5 @@ def test_load_domain_config_missing_prompt(tmp_path):
     (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
     (base / "strategies.yaml").write_text("direct:\n", encoding="utf-8")
     (base / "prompts" / "direct.md").write_text("d {structure}", encoding="utf-8")
-    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
     with pytest.raises(ConfigError):
         load_domain_config(str(base))

@@ -90,7 +90,6 @@ def get_api_key() -> str:
 class IntentDef:
     id: str
     description: str
-    needs_clarification: bool = False
 
 
 @dataclass
@@ -165,7 +164,6 @@ def load_domain_config(domain_dir: str) -> DomainConfig:
         intents[iid] = IntentDef(
             id=iid,
             description=item.get("description") or "",
-            needs_clarification=bool(item.get("needs_clarification", False)),
         )
 
     mapping_data = _read_yaml(base / "intent_mapping.yaml")
@@ -213,7 +211,6 @@ def load_domain_config(domain_dir: str) -> DomainConfig:
     prompt_dir = base / "prompts"
     for sid in strategies:
         prompts[sid] = _read_prompt(prompt_dir / f"{sid}.md")
-    prompts["clarify"] = _read_prompt(prompt_dir / "clarify.md")
     prompts["unsupported_complex"] = _read_prompt(prompt_dir / "unsupported_complex.md")
 
     return DomainConfig(

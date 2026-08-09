@@ -9,7 +9,7 @@ def _domain():
         out_of_domain_reply="Out of domain.",
         intents={
             "faq": IntentDef("faq", "quick"),
-            "troubleshooting": IntentDef("troubleshooting", "debug", needs_clarification=True),
+            "troubleshooting": IntentDef("troubleshooting", "debug"),
         },
         intent_mapping={"faq": "direct", "troubleshooting": "debugging"},
         strategies={
@@ -19,7 +19,6 @@ def _domain():
         prompts={
             "direct": "Direct {name} {description} {structure}",
             "debugging": "Debug {name} {description} {structure}",
-            "clarify": "What do you mean by {question} ({intent}/{complexity})?",
             "unsupported_complex": "Needs orchestrator.",
         },
     )
@@ -55,40 +54,6 @@ def test_respond_answer_appends_history():
     assert resp.kind == "answer"
     assert resp.text == "the answer"
     assert chat.history == [("what is defer", "the answer")]
-
-
-def test_respond_clarification_then_answer():
-    chat = Chat(FakeClient([
-        '{"in_domain": true, "reason": "ok"}',
-        '{"intent": "troubleshooting", "reason": "ok"}',
-        '{"complexity": "medium", "reason": "ok"}',
-        "clarify question",
-        '{"in_domain": true, "reason": "ok"}',
-        '{"intent": "troubleshooting", "reason": "ok"}',
-        '{"complexity": "medium", "reason": "ok"}',
-        "the final answer",
-    ]), _config(), _domain())
-    resp = chat.respond("my go program hangs")
-    assert resp.kind == "clarification"
-    assert "clarify question" in resp.text
-    resp2 = chat.answer_clarification("it hangs on startup")
-    assert resp2.kind == "answer"
-    assert resp2.text == "the final answer"
-    assert chat.history == [
-        ("my go program hangs\n\nAdditional context: it hangs on startup", "the final answer")
-    ]
-
-
-def test_respond_skips_clarification_when_disallowed():
-    chat = Chat(FakeClient([
-        '{"in_domain": true, "reason": "ok"}',
-        '{"intent": "troubleshooting", "reason": "ok"}',
-        '{"complexity": "medium", "reason": "ok"}',
-        "direct answer",
-    ]), _config(), _domain())
-    resp = chat.respond("my program hangs", allow_clarification=False)
-    assert resp.kind == "answer"
-    assert resp.text == "direct answer"
 
 
 def test_respond_unsupported_complex():

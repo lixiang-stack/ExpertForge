@@ -37,7 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     client = LLMClient(base_url=config.base_url, api_key=api_key, model=config.model)
     try:
         if ask is not None:
-            response = Chat(client, config, domain).respond(ask, allow_clarification=False)
+            response = Chat(client, config, domain).respond(ask)
             print(response.text)
         else:
             run_repl(client, config, domain)

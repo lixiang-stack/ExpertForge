@@ -1,33 +1,22 @@
 - id: concept_explain
   description: Explain a concept, design rationale, or "why" question
-  needs_clarification: false
 - id: tutorial
   description: Learn a topic step by step
-  needs_clarification: false
 - id: learning_guide
   description: Create a learning path or guide
-  needs_clarification: false
 - id: faq
   description: Quick factual or definitional question
-  needs_clarification: false
 - id: summarization
   description: Summarize provided content
-  needs_clarification: false
 - id: troubleshooting
   description: Diagnose and resolve a specific problem
-  needs_clarification: true
 - id: comparison
   description: Compare two or more technologies or approaches
-  needs_clarification: false
 - id: performance_analysis
   description: Analyze performance characteristics or bottlenecks
-  needs_clarification: false
 - id: architecture_design
   description: Design system or component architecture
-  needs_clarification: true
 - id: generate_code
   description: Write code to accomplish a task
-  needs_clarification: true
 - id: code_review
   description: Review provided code
-  needs_clarification: false

@@ -16,7 +16,6 @@ class RouteResult:
     strategy: str
     intent: str | None = None
     complexity: str | None = None
-    needs_clarification: bool = False
     reject_reason: str = ""
 
 
@@ -60,15 +59,9 @@ class Router:
         if strategy_def and strategy_def.complexity_gate and complexity_result.level == "complex":
             strategy = COMPLEX_UNSUPPORTED
 
-        needs_clarification = False
-        if strategy != COMPLEX_UNSUPPORTED:
-            intent_def = self.domain.intents.get(intent_result.intent_id)
-            needs_clarification = bool(intent_def and intent_def.needs_clarification)
-
         return RouteResult(
             in_domain=True,
             strategy=strategy,
             intent=intent_result.intent_id or None,
             complexity=complexity_result.level,
-            needs_clarification=needs_clarification,
         )
