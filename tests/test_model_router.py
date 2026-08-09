@@ -40,7 +40,6 @@ def test_simple_uses_model_low():
 
 
 def test_simple_missing_model_low_falls_back_to_default():
-    domain = _domain()
     result = resolve_model(_config(), _domain(), _route(complexity="simple"), "default")
     assert result == "default"
 

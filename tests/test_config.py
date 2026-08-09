@@ -100,6 +100,18 @@ def test_legacy_classifier_model_entry_ignored(tmp_path, monkeypatch):
     assert cfg.classifier_model == "low-a"  # legacy key ignored
 
 
+def test_legacy_classifier_model_without_model_low_ignored(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "classifier_model": "legacy-a",
+        "domain_dir": "domain/software_engineering",
+    })
+    cfg = load_config(path)
+    assert cfg.classifier_model == "model-a"  # legacy key ignored, derives from model
+
+
 def test_classifier_model_falls_back_to_model(tmp_path, monkeypatch):
     monkeypatch.delenv("AGENT_BASE_URL", raising=False)
     path = _write_config(tmp_path, {
