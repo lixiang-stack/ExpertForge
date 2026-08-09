@@ -33,7 +33,7 @@ class FakeClient:
     def __init__(self, responses):
         self.responses = list(responses)
 
-    def chat_completion(self, messages, model=None, disable_thinking=False):
+    def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False):
         return self.responses.pop(0)
 
 

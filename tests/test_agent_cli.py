@@ -57,7 +57,7 @@ def test_main_runs_repl(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda prompt="": iter(["exit"]).__next__())
 
     class FakeClient:
-        def chat_completion(self, messages, model=None, disable_thinking=False):
+        def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False):
             return '{"in_domain": true, "reason": "ok"}'
 
     monkeypatch.setattr(agent_cli, "LLMClient", lambda *a, **k: FakeClient())
@@ -79,7 +79,7 @@ def test_main_ask_prints_answer(tmp_path, monkeypatch, capsys):
                 "one-shot answer",
             ]
 
-        def chat_completion(self, messages, model=None, disable_thinking=False):
+        def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False):
             return self.responses.pop(0)
 
     monkeypatch.setattr(agent_cli, "LLMClient", lambda *a, **k: FakeClient())

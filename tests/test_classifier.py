@@ -14,8 +14,8 @@ class FakeClient:
         self.responses = list(responses)
         self.calls = []
 
-    def chat_completion(self, messages, model=None, disable_thinking=False):
-        self.calls.append((messages, model, disable_thinking))
+    def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False):
+        self.calls.append((messages, model, disable_thinking, json_mode))
         return self.responses.pop(0)
 
 
@@ -25,46 +25,36 @@ def test_classify_in_domain():
     assert isinstance(result, Classification)
     assert result.in_domain is True
     assert result.reason == "in software engineering"
+    assert len(client.calls) == 1
     assert client.calls[0][2] is True
+    assert client.calls[0][3] is True
 
 
 def test_classify_out_of_domain():
     client = FakeClient(['{"in_domain": false, "reason": "unrelated"}'])
     result = classify_question(client, "What is the weather?", "软件工程", "software engineering")
     assert result.in_domain is False
+    assert len(client.calls) == 1
 
 
-def test_retry_then_success():
-    client = FakeClient(["not JSON", '{"in_domain": true, "reason": "ok"}'])
-    result = classify_question(client, "What is Kafka?", "软件工程", "software engineering")
-    assert result.in_domain is True
-    assert len(client.calls) == 2
-    assert "Reminder" in client.calls[1][0][0]["content"]
-
-
-def test_string_bool_not_coerced_to_true():
-    client = FakeClient(
-        [
-            '{"in_domain": "false", "reason": "unrelated"}',
-            '{"in_domain": false, "reason": "unrelated"}',
-        ]
-    )
-    result = classify_question(client, "What is the weather?", "软件工程", "software engineering")
-    assert result.in_domain is False
-    assert len(client.calls) == 2
-
-
-def test_retry_then_fallback_reject():
-    client = FakeClient(["garbage", "more garbage"])
+def test_single_call_parse_failure_falls_back_reject():
+    client = FakeClient(["garbage"])
     result = classify_question(client, "xxx", "软件工程", "software engineering")
     assert result.in_domain is False
     assert "Unreliable" in result.reason
-    assert len(client.calls) == 2
+    assert len(client.calls) == 1
+
+
+def test_string_bool_not_coerced_to_true():
+    client = FakeClient(['{"in_domain": "false", "reason": "unrelated"}'])
+    result = classify_question(client, "What is the weather?", "软件工程", "software engineering")
+    assert result.in_domain is False
+    assert len(client.calls) == 1
 
 
 def test_propagates_llm_error():
     class FailingClient:
-        def chat_completion(self, messages, model=None, disable_thinking=False):
+        def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False):
             raise LLMError("boom")
 
     with pytest.raises(LLMError):
@@ -76,42 +66,41 @@ def test_classify_intent_success():
     result = classify_intent(client, "why is interface like this", "软件工程", "sw", ["concept_explain", "faq"])
     assert result.intent_id == "concept_explain"
     assert result.reason == "why"
-    assert client.calls[0][2] is True
+    assert len(client.calls) == 1
+    assert client.calls[0][3] is True
 
 
-def test_classify_intent_unknown_retries():
-    client = FakeClient(
-        ['{"intent": "bogus", "reason": "x"}', '{"intent": "faq", "reason": "y"}']
-    )
-    result = classify_intent(client, "q", "软件工程", "sw", ["concept_explain", "faq"])
-    assert result.intent_id == "faq"
-    assert len(client.calls) == 2
-
-
-def test_classify_intent_unreliable_falls_back_empty():
-    client = FakeClient(["garbage", "garbage"])
+def test_classify_intent_unknown_falls_back_empty():
+    client = FakeClient(['{"intent": "bogus", "reason": "x"}'])
     result = classify_intent(client, "q", "软件工程", "sw", ["concept_explain", "faq"])
     assert result.intent_id == ""
     assert "Unreliable" in result.reason
-    assert len(client.calls) == 2
+    assert len(client.calls) == 1
+
+
+def test_classify_intent_unreliable_falls_back_empty():
+    client = FakeClient(["garbage"])
+    result = classify_intent(client, "q", "软件工程", "sw", ["concept_explain", "faq"])
+    assert result.intent_id == ""
+    assert "Unreliable" in result.reason
+    assert len(client.calls) == 1
 
 
 def test_classify_complexity_success():
     client = FakeClient(['{"complexity": "complex", "reason": "big scope"}'])
     result = classify_complexity(client, "design a redis cluster", "软件工程", "sw")
     assert result.level == "complex"
+    assert len(client.calls) == 1
 
 
-def test_classify_complexity_invalid_level_retries():
-    client = FakeClient(
-        ['{"complexity": "huge", "reason": "x"}', '{"complexity": "medium", "reason": "y"}']
-    )
+def test_classify_complexity_invalid_level_defaults_medium():
+    client = FakeClient(['{"complexity": "huge", "reason": "x"}'])
     result = classify_complexity(client, "q", "软件工程", "sw")
     assert result.level == "medium"
-    assert len(client.calls) == 2
+    assert len(client.calls) == 1
 
 
 def test_classify_complexity_unreliable_defaults_medium():
-    client = FakeClient(["garbage", "garbage"])
+    client = FakeClient(["garbage"])
     result = classify_complexity(client, "q", "软件工程", "sw")
     assert result.level == "medium"

@@ -68,24 +68,18 @@ Rules:
 User question: {question}
 """
 
-_STRICT_REMINDER = "\nReminder: output ONLY the JSON object above and no other text."
-
-
 def _build_classify_prompt(name: str, description: str, question: str) -> str:
     return _CLASSIFY_PROMPT.format(name=name, description=description, question=question)
 
 
 def _classify_json(client, prompt: str, parser, *, model: str | None = None):
-    for strict in (False, True):
-        text = client.chat_completion(
-            [{"role": "system", "content": prompt + (_STRICT_REMINDER if strict else "")}],
-            model=model,
-            disable_thinking=True,
-        )
-        parsed = parser(text)
-        if parsed is not None:
-            return parsed
-    return None
+    text = client.chat_completion(
+        [{"role": "system", "content": prompt}],
+        model=model,
+        disable_thinking=True,
+        json_mode=True,
+    )
+    return parser(text)
 
 
 def _parse_classification(text: str) -> Classification | None:

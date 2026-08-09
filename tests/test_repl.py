@@ -27,7 +27,7 @@ class FakeClient:
     def __init__(self, responses):
         self.responses = list(responses)
 
-    def chat_completion(self, messages, model=None, disable_thinking=False):
+    def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False):
         return self.responses.pop(0)
 
 
@@ -59,7 +59,7 @@ def test_repl_error_does_not_crash(monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
 
     class ErrorClient:
-        def chat_completion(self, messages, model=None, disable_thinking=False):
+        def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False):
             raise LLMError("network error")
 
     run_repl(ErrorClient(), _config(), _domain())
