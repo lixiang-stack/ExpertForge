@@ -11,33 +11,35 @@ route a user question to a **low-end (cheap) model** when it is `simple`, and to
 **high-end (capable) model** when it is `medium` or `complex`, while preserving the
 existing per-strategy model override.
 
-The classification call keeps using `classifier_model` (unchanged). The orchestrator
-for complex tasks (§13) is a separate, later iteration and stays out of scope here.
+The classification call uses the derived classifier model (`model_low or model`). The
+orchestrator for complex tasks (§13) is a separate, later iteration and stays out of
+scope here.
 
 ## 2. Configuration
 
-`AgentConfig` gains two optional fields:
+`AgentConfig` keeps three fields; the standalone `classifier_model` config entry is
+removed:
 
 ```json
 {
   "base_url": "https://api.deepseek.com",
   "model": "deepseek-v4-flash",
-  "classifier_model": "deepseek-v4-flash",
   "model_low": "deepseek-v4-flash",
-  "model_high": "deepseek-reasoner"
+  "model_high": "deepseek-pro"
 }
 ```
 
+- `model` — the default fallback tier (existing field, unchanged).
 - `model_low` — low-end tier. When absent, falls back to `model`.
 - `model_high` — high-end tier. When absent, falls back to `model`.
-- `model` — the default fallback tier (existing field, unchanged).
-- `classifier_model` — classification model (existing field, unchanged).
 
 `agent/config.py` reads `model_low`/`model_high` and stores `None` when the value is
 missing or an empty string. No new required fields: existing `config.json` files keep
 working.
 
-`config.example.json` gains both fields with illustrative values and a short comment.
+`config.example.json` drops `classifier_model` and gains `model_low`/`model_high` with a
+short comment. The classification model is no longer explicitly configured — it is
+derived: `model_low or model` (prefer the low-end tier; fall back to `model`).
 
 ## 3. New module: `agent/model_router.py`
 
@@ -83,7 +85,19 @@ model = resolve_model(self.config, self.domain, route, self.config.model)
 Behavior for existing configs that already set `strategy.model` is unchanged.
 `agent/router.py` is untouched; `RouteResult` is untouched.
 
-## 5. Testing
+## 5. Classification model derivation (agent/config.py)
+
+`AgentConfig.classifier_model` stays on the dataclass, but `load_config` now sets it
+as `model_low or model` instead of reading an explicit `classifier_model` entry:
+
+```python
+classifier_model = raw.get("model_low") or model
+```
+
+`Router` keeps calling `self.config.classifier_model` — unchanged. `classifier_model`
+is treated as a derived value, not a first-class config entry.
+
+## 6. Testing
 
 New `tests/test_model_router.py`:
 
@@ -98,19 +112,23 @@ Update `tests/test_chat.py`: FakeClient records the model argument; assert
 assertions unchanged.
 
 `tests/test_config.py`: add loading cases for `model_low`/`model_high` (present,
-missing, empty string → None).
+missing, empty string → None); add that `classifier_model` derives as `model_low or
+model` and that a legacy explicit `classifier_model` entry is ignored.
 
 Run `uv run pytest -q` (all green).
 
-## 6. Docs
+## 7. Docs
 
 - Update `README.md` config table with `model_low`/`model_high`.
 - Add this spec (done).
 
-## 7. Success criteria
+## 8. Success criteria
 
 1. `uv run pytest -q` all green.
 2. `simple` → low-end tier; `medium`/`complex` → high-end tier, with `model` fallback.
 3. Strategy-level `model` override retains its priority.
 4. Existing `config.json` files (without the new fields) work unchanged.
-5. Classification still uses `classifier_model`; classification behavior unchanged.
+5. Classification uses the derived `model_low or model`; no explicit `classifier_model`
+   config entry is needed.
+6. Model config stays to three fields (`model`, `model_low`, `model_high`) — no
+   configuration proliferation.
