@@ -1,3 +1,6 @@
+import json
+
+from agent.classification import ClassificationService
 from agent.config import AgentConfig, DomainConfig, IntentDef, StrategyDef
 from agent.router import COMPLEX_UNSUPPORTED, Router
 
@@ -39,16 +42,30 @@ class FakeClient:
     def __init__(self, responses):
         self.responses = list(responses)
 
-    def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False):
+    def chat_completion(
+        self,
+        messages,
+        model=None,
+        disable_thinking=False,
+        json_mode=False,
+        json_schema=None,
+    ):
         return self.responses.pop(0)
 
 
-def test_route_in_domain_simple_strategy():
-    client = FakeClient([
-        '{"in_domain": true, "reason": "ok"}',
-        '{"intent": "concept_explain", "reason": "ok"}',
-        '{"complexity": "simple", "reason": "ok"}',
-    ])
+def _combined(in_domain, intent, complexity, reason="ok"):
+    return (
+        '{{"in_domain": {}, "intent": {}, "complexity": {}, "reason": "{}"}}'
+    ).format(
+        "true" if in_domain else "false",
+        json.dumps(intent),
+        json.dumps(complexity),
+        reason,
+    )
+
+
+def test_route_in_domain_maps_strategy_and_keeps_fields():
+    client = FakeClient([_combined(True, "concept_explain", "simple")])
     result = Router(client, _config(), _domain()).route("q")
     assert result.in_domain is True
     assert result.strategy == "teaching"
@@ -56,8 +73,8 @@ def test_route_in_domain_simple_strategy():
     assert result.complexity == "simple"
 
 
-def test_route_out_of_domain():
-    client = FakeClient(['{"in_domain": false, "reason": "unrelated"}'])
+def test_route_out_of_domain_rejects():
+    client = FakeClient([_combined(False, None, None, "unrelated")])
     result = Router(client, _config(), _domain()).route("weather?")
     assert result.in_domain is False
     assert result.strategy == "reject"
@@ -65,30 +82,18 @@ def test_route_out_of_domain():
 
 
 def test_route_unknown_intent_defaults_to_direct():
-    client = FakeClient([
-        '{"in_domain": true, "reason": "ok"}',
-        '{"intent": "", "reason": "unreliable"}',
-        '{"complexity": "simple", "reason": "ok"}',
-    ])
+    client = FakeClient([_combined(True, "bogus", "simple")])  # intent bogus → validation sets None
     result = Router(client, _config(), _domain()).route("q")
     assert result.strategy == "direct"
 
 
 def test_route_complex_gated_to_unsupported():
-    client = FakeClient([
-        '{"in_domain": true, "reason": "ok"}',
-        '{"intent": "architecture_design", "reason": "ok"}',
-        '{"complexity": "complex", "reason": "ok"}',
-    ])
+    client = FakeClient([_combined(True, "architecture_design", "complex")])
     result = Router(client, _config(), _domain()).route("design a big system")
     assert result.strategy == COMPLEX_UNSUPPORTED
 
 
 def test_route_complex_ungated_strategy_stays():
-    client = FakeClient([
-        '{"in_domain": true, "reason": "ok"}',
-        '{"intent": "faq", "reason": "ok"}',
-        '{"complexity": "complex", "reason": "ok"}',
-    ])
+    client = FakeClient([_combined("true", "faq", "complex")])
     result = Router(client, _config(), _domain()).route("q")
     assert result.strategy == "direct"

@@ -26,17 +26,17 @@ class FakeClient:
     def __init__(self, responses):
         self.responses = list(responses)
 
-    def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False):
+    def chat_completion(
+        self, messages, model=None, disable_thinking=False, json_mode=False, json_schema=None
+    ):
         return self.responses.pop(0)
 
 
 def test_repl_answers(monkeypatch, capsys):
-    inputs = iter(["What is defer?", "exit"])
-    monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
+    inputs = ["What is defer?", "exit"]
+    monkeypatch.setattr("builtins.input", lambda prompt="": inputs.pop(0))
     client = FakeClient([
-        '{"in_domain": true, "reason": "ok"}',
-        '{"intent": "faq", "reason": "ok"}',
-        '{"complexity": "simple", "reason": "ok"}',
+        '{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}',
         "the answer",
     ])
     run_repl(client, _config(), _domain())
@@ -45,20 +45,24 @@ def test_repl_answers(monkeypatch, capsys):
 
 
 def test_repl_rejects(monkeypatch, capsys):
-    inputs = iter(["What is the weather?", "exit"])
-    monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
-    client = FakeClient(['{"in_domain": false, "reason": "unrelated"}'])
+    inputs = ["What is the weather?", "exit"]
+    monkeypatch.setattr("builtins.input", lambda prompt="": inputs.pop(0))
+    client = FakeClient([
+        '{"in_domain": false, "intent": null, "complexity": null, "reason": "unrelated"}'
+    ])
     run_repl(client, _config(), _domain())
     out = capsys.readouterr().out
     assert "Out of domain." in out
 
 
 def test_repl_error_does_not_crash(monkeypatch, capsys):
-    inputs = iter(["question", "exit"])
-    monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
+    inputs = ["question", "exit"]
+    monkeypatch.setattr("builtins.input", lambda prompt="": inputs.pop(0))
 
     class ErrorClient:
-        def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False):
+        def chat_completion(
+            self, messages, model=None, disable_thinking=False, json_mode=False, json_schema=None
+        ):
             raise LLMError("network error")
 
     run_repl(ErrorClient(), _config(), _domain())
