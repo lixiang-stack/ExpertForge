@@ -1,5 +1,3 @@
-import json
-
 import pytest
 
 from agent.classification import (
@@ -60,6 +58,15 @@ def test_classify_single_call_returns_all_fields():
     assert json_mode is False
     assert json_schema is not None
     assert "intent" in json_schema["properties"]
+
+
+def test_classify_garbage_text_falls_back_reject():
+    result, client = _classify("garbage that is not json")
+    assert result.in_domain is False
+    assert result.intent is None
+    assert result.complexity is None
+    assert result.reason.startswith("Unreliable")
+    assert len(client.calls) == 1
 
 
 def test_classify_out_of_domain_accepts_null():

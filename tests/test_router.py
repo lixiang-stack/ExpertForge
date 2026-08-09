@@ -1,6 +1,5 @@
 import json
 
-from agent.classification import ClassificationService
 from agent.config import AgentConfig, DomainConfig, IntentDef, StrategyDef
 from agent.router import COMPLEX_UNSUPPORTED, Router
 
@@ -94,6 +93,6 @@ def test_route_complex_gated_to_unsupported():
 
 
 def test_route_complex_ungated_strategy_stays():
-    client = FakeClient([_combined("true", "faq", "complex")])
+    client = FakeClient([_combined(True, "faq", "complex")])
     result = Router(client, _config(), _domain()).route("q")
     assert result.strategy == "direct"
