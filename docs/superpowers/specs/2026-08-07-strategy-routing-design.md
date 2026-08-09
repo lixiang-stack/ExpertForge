@@ -20,18 +20,18 @@
 - 领域配置目录化（yaml + markdown prompts）。
 - Intent 分类与 Complexity 分类（分两次 LLM 调用）。
 - `intent → strategy` 确定性映射，配置化。
-- Clarification 前置阶段（单次确认，不循环）。
-- 五个策略处理器：`direct`、`teaching`、`debugging`、`analysis`、`coding`。
+- 五个策略处理器：`direct`、`teaching`、`debugging`、`analysis`、`code_snippet`。
 - Chat Interface（会话上下文、连续多轮）与 Single-shot Execution。
 - `--ask` 单次问答入口与交互式 REPL。
 - 模型路由：`classifier_model` + 每 strategy 可选 `model`。
 - 一次性生成（非流式）。
+- 分类调用采用单次 structured output（`response_format=json_object`），成功后不再重试。
 
 **Out of scope（延后）**
 
 - Orchestrator / Planner / Workers / Aggregator / Evaluator / Optimizer。
-- complex 策略的真实多 worker 执行。
-- 多轮澄清循环。
+- complex 任务的真实多 worker 执行。
+- Clarification 前置阶段（整体移除，不做澄清）。
 
 ## 设计原则
 
@@ -39,8 +39,7 @@
 2. 分类拆为 `Domain → Intent → Complexity`（`intent→strategy` 映射确定性）。
 3. 所有映射与 prompt 模板配置化，域解耦。
 4. 只有复杂 Strategy 才需要 Orchestrator；简单问题直接回答。
-5. Single-shot Execution；Clarification 是前置阶段，非策略，且发生于任何 worker 之前。
-6. 处理器返回**完整字符串**（一次性生成，不做流式中间切片）。
+5. Single-shot Execution，处理器返回**完整字符串**（一次性生成，不做流式中间切片）。
 
 ## 架构概览
 
@@ -49,9 +48,8 @@ Question
    ├─ Domain Classifier → out-of-domain 拒绝
    ├─ Intent Classifier
    ├─ Complexity Classifier
-   ├─ RouteResult { intent, complexity, strategy, needs_clarification }
+   ├─ RouteResult { intent, complexity, strategy }
    │      │
-   │      ├─ needs_clarification → Clarifier 单次确认 → 合并 → 重走路由
    │      └─ strategy
    │             ├─ complex_unsupported → 占位提示
    │             └─ strategy processor → 一次性生成 → final answer
@@ -75,8 +73,7 @@ domain/software_engineering/
     teaching.md
     debugging.md
     analysis.md
-    coding.md
-    clarify.md
+    code_snippet.md
     unsupported_complex.md
 ```
 
@@ -86,28 +83,27 @@ domain/software_engineering/
 
 ### 分类与路由
 
-- **IntentClassifier**：`classify_intent(question, intents)` → `intent_id`。复用现有 `classifier.py` 的 LLM + JSON 解析模式（抽一个可复用基类）。
+- **IntentClassifier**：`classify_intent(question, intents)` → `intent_id`。复用现有 `classifier.py` 的 LLM + JSON 解析模式。
 - **ComplexityClassifier**：`classify_complexity(question, domain)` → `simple|medium|complex`。
-- `Router.route(question, history)` → `RouteResult{ intent, complexity, strategy, needs_clarification }`：
+- `Router.route(question)` → `RouteResult{ intent, complexity, strategy }`：
   - Domain 判拒；intent/complexity 各一次调用。
   - 映射查表 `intent→strategy`（确定性）。
-  - Clarification flag：由 `intents.yaml` 中每个 intent 的 `needs_clarification`（默认 false）+ 复杂度边界判定。
-  - complexity gate：若 strategy ∈ {teaching, debugging, analysis, coding} 且 `complexity == complex` → 归为 `complex_unsupported`（占位，不调 LLM 生成实答）。
+  - complexity gate：若 strategy ∈ {teaching, debugging, analysis, code_snippet} 且 `complexity == complex` → 归为 `complex_unsupported`（占位，不调 LLM 生成实答）。
+- 分类 LLM 调用采用**单次 structured output**：`response_format={"type": "json_object"}`，解析失败不再重试，直接落入默认值（reject / "" / medium）。
 
 ### 策略处理器
 
 `processors/`
 
 - `base.py`：`Processor` 基类（加载 prompt → 构建消息 → 一次性 `chat_completion` → 返回 `str`）。
-- `direct.py`、`teaching.py`、`debugging.py`、`analysis.py`、`coding.py`：各自从 `prompts/<id>.md` + 结构指令组装 system prompt，`process(question, context) -> str`。
+- `direct.py`、`teaching.py`、`debugging.py`、`analysis.py`、`code_snippet.py`：各自从 `prompts/<id>.md` + 结构指令组装 system prompt，`process(question, context) -> str`。
 - `registry.py`：strategy id → 处理器实例映射，由配置显式绑定（非反射自动发现）。
 - 处理器**不做多轮、不管理历史、不循环追问**；会话上下文由 Chat Interface 传入。
 
 ### Chat Interface 与 Single-shot Execution
 
-- `agent/chat.py` — `Chat` 引擎，持有 `AgentRuntime`（config/domain/router/processors）+ `session_history`。
+- `agent/chat.py` — `Chat` 引擎，持有 `AgentConfig`/`domain`/`router`/`processors` + `session_history`。
 - `respond(question) -> str`：单问题一次推理一次生成，返回完整字符串，追加到 history。
-- Clarification：路由返回 `needs_clarification` → 交互层提示澄清问题 → 用户补充 → 合并完整问题 → **重走路由**（不循环，非独立策略）。
 - complex_unsupported → 输出占位提示。
 
 ### CLI
@@ -122,25 +118,25 @@ domain/software_engineering/
 输入 question
 → Chat.respond
 → Router.route
-→ (needs_clarification? -> 合并后重走)
 → processor.process(question, context) -> str
 → 追加历史，返回完整 answer
 ```
 
 ## 错误处理
 
-- 分类结果无法解析 → 降级回退（沿用 `classifier.py` 现在的失败回退策略）。
+- 分类结果无法解析 → 降级回退（reject / intent 空 / medium）。
+- `response_format=json_object` 不被 API 支持 → `LLMError` 直接透传（fail-loud）。
 - LLM 调用失败 → `LLMError` 透传给交互层显示。
 - 配置缺字段/坏 yaml/json → `ConfigError`。
 
 ## 测试
 
-- 配置加载与路由单测（domain_dir 拆载、yaml/markdown 解析、坏格式报错、intent→strategy 映射、complex→complex_unsupported、needs_clarification flag）。
-- 分类单测（intent/complexity prompt 构造与 JSON 解析/降级）。
+- 配置加载与路由单测（domain_dir 拆载、yaml/markdown 解析、坏格式报错、intent→strategy 映射、complex→complex_unsupported）。
+- 分类单测（intent/complexity prompt 构造与 JSON 解析/降级、单次调用）。
 - 策略处理器单测（各 prompt 结构 + 一次性调用 + 返回完整串）。
 - CLI 集成测试（`main` 从输入到路由到输出的完整串联）。
 - 端到端冒烟（mock LLM，示例领域配置跑通一次真实意图）。
-- 验收：`uv run pytest` 全绿；README 更新（安装、领域目录配含示例）。
+- 验收：`uv run pytest` 全绿；README 更新（安装、领域目录配置含示例）。
 
 ## 未来扩展（非本期）
 
