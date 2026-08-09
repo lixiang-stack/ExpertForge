@@ -23,7 +23,7 @@ Edit `config.json`:
 
 - `base_url`: the OpenAI-compatible API base URL.
 - `model`: the model to use for answers.
-- `classifier_model`: the model used for intent/complexity classification
+- `classifier_model`: the model used for domain/intent/complexity classification
   (falls back to `model` if omitted).
 - `domain_dir`: path to your domain directory (see below).
 
