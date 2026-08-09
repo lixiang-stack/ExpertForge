@@ -123,3 +123,39 @@ def test_chat_completion_json_mode_off_by_default(mock_openai):
 
     kwargs = mock_openai.return_value.chat.completions.create.call_args.kwargs
     assert "response_format" not in kwargs
+
+
+@patch("agent.llm.OpenAI")
+def test_chat_completion_json_schema_passes_response_format(mock_openai):
+    resp = MagicMock()
+    resp.choices[0].message.content = "{}"
+    mock_openai.return_value.chat.completions.create.return_value = resp
+
+    schema = {
+        "type": "object",
+        "properties": {"ok": {"type": "boolean"}},
+        "required": ["ok"],
+    }
+    client = LLMClient("https://api.example.com/v1", "key", "model-a")
+    client.chat_completion([{"role": "user", "content": "hi"}], json_schema=schema)
+
+    kwargs = mock_openai.return_value.chat.completions.create.call_args.kwargs
+    assert kwargs["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {"name": "classification_result", "schema": schema, "strict": False},
+    }
+
+
+@patch("agent.llm.OpenAI")
+def test_chat_completion_json_schema_wins_over_json_mode(mock_openai):
+    resp = MagicMock()
+    resp.choices[0].message.content = "{}"
+    mock_openai.return_value.chat.completions.create.return_value = resp
+
+    client = LLMClient("https://api.example.com/v1", "key", "model-a")
+    client.chat_completion(
+        [{"role": "user", "content": "hi"}], json_mode=True, json_schema={"type": "object"}
+    )
+
+    kwargs = mock_openai.return_value.chat.completions.create.call_args.kwargs
+    assert kwargs["response_format"]["type"] == "json_schema"

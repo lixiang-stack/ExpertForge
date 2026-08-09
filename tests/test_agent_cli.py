@@ -56,8 +56,10 @@ def test_main_runs_repl(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda prompt="": iter(["exit"]).__next__())
 
     class FakeClient:
-        def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False):
-            return '{"in_domain": true, "reason": "ok"}'
+        def chat_completion(
+            self, messages, model=None, disable_thinking=False, json_mode=False, json_schema=None
+        ):
+            return '{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}'
 
     monkeypatch.setattr(agent_cli, "LLMClient", lambda *a, **k: FakeClient())
     assert agent_cli.main([str(config_path)]) == 0
@@ -72,13 +74,13 @@ def test_main_ask_prints_answer(tmp_path, monkeypatch, capsys):
     class FakeClient:
         def __init__(self, *a, **k):
             self.responses = [
-                '{"in_domain": true, "reason": "ok"}',
-                '{"intent": "faq", "reason": "ok"}',
-                '{"complexity": "simple", "reason": "ok"}',
+                '{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}',
                 "one-shot answer",
             ]
 
-        def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False):
+        def chat_completion(
+            self, messages, model=None, disable_thinking=False, json_mode=False, json_schema=None
+        ):
             return self.responses.pop(0)
 
     monkeypatch.setattr(agent_cli, "LLMClient", lambda *a, **k: FakeClient())

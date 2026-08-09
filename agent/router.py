@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .classifier import classify_complexity, classify_intent, classify_question
+from .classification import ClassificationService
 from .config import AgentConfig, DomainConfig
 from .llm import LLMClient
 
@@ -24,44 +24,22 @@ class Router:
         self.client = client
         self.config = config
         self.domain = domain
+        self.classifier = ClassificationService(client, domain)
 
     def route(self, question: str) -> RouteResult:
-        domain_result = classify_question(
-            self.client,
-            question,
-            self.domain.name,
-            self.domain.description,
-            model=self.config.classifier_model,
-        )
-        if not domain_result.in_domain:
+        result = self.classifier.classify(question, model=self.config.classifier_model)
+        if not result.in_domain:
             return RouteResult(
-                in_domain=False, strategy="reject", reject_reason=domain_result.reason
+                in_domain=False, strategy="reject", reject_reason=result.reason
             )
-
-        intent_result = classify_intent(
-            self.client,
-            question,
-            self.domain.name,
-            self.domain.description,
-            list(self.domain.intents),
-            model=self.config.classifier_model,
-        )
-        complexity_result = classify_complexity(
-            self.client,
-            question,
-            self.domain.name,
-            self.domain.description,
-            model=self.config.classifier_model,
-        )
-
-        strategy = self.domain.intent_mapping.get(intent_result.intent_id, DEFAULT_STRATEGY)
+        intent_id = result.intent
+        strategy = self.domain.intent_mapping.get(intent_id, DEFAULT_STRATEGY)
         strategy_def = self.domain.strategies.get(strategy)
-        if strategy_def and strategy_def.complexity_gate and complexity_result.level == "complex":
+        if strategy_def and strategy_def.complexity_gate and result.complexity == "complex":
             strategy = COMPLEX_UNSUPPORTED
-
         return RouteResult(
             in_domain=True,
             strategy=strategy,
-            intent=intent_result.intent_id or None,
-            complexity=complexity_result.level,
+            intent=intent_id,
+            complexity=result.complexity,
         )

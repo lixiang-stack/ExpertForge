@@ -22,6 +22,7 @@ class LLMClient:
         temperature: float = 0.3,
         disable_thinking: bool = False,
         json_mode: bool = False,
+        json_schema: dict | None = None,
     ) -> str:
         try:
             kwargs = {
@@ -30,7 +31,16 @@ class LLMClient:
                 "temperature": temperature,
                 "stream": False,
             }
-            if json_mode:
+            if json_schema is not None:
+                kwargs["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "classification_result",
+                        "schema": json_schema,
+                        "strict": False,
+                    },
+                }
+            elif json_mode:
                 kwargs["response_format"] = {"type": "json_object"}
             if disable_thinking:
                 kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
