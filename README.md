@@ -45,7 +45,7 @@ Each expert domain lives in its own directory, e.g. `domain/software_engineering
 - `strategies.yaml`: strategy definitions (optional per-strategy model and
   complexity gate).
 - `prompts/*.md`: one prompt per strategy (`direct`/`teaching`/`debugging`/
-  `analysis`/`coding`), plus `clarify.md` and `unsupported_complex.md`.
+  `analysis`/`code_snippet`), plus `unsupported_complex.md`.
 
 ## Run
 
