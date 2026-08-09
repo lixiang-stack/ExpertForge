@@ -34,26 +34,19 @@ def build_classification_schema(intent_ids: list[str]) -> dict:
     }
 
 
-def build_classification_prompt(
-    name: str,
-    description: str,
-    intent_items: list[tuple[str, str]],
-    question: str,
-) -> str:
-    intents_text = "\n".join(f"- {iid}: {desc}" for iid, desc in intent_items)
-    return f"""You are a domain and task classifier for an expert domain named {name}.
+_CLASSIFICATION_PROMPT = """You are a domain and task classifier for an expert domain named {name}.
 
 Domain description: {description}
 
 Available intents:
-{intents_text}
+{intents}
 
 Rules:
 - Decide whether the question belongs to the domain above.
 - If in_domain is false, set intent and complexity to null.
 - If in_domain is true, choose the single intent that best matches the user's goal
   from the listed intents. Do not invent a new intent.
-- Also judge task complexity as one of {", ".join(COMPLEXITY_LEVELS)}:
+- Also judge task complexity as one of {complexity_levels}:
   simple (short direct answer), medium (needs structured explanation),
   complex (large scope, multiple steps or subsystems).
 - Output ONLY a single JSON object and nothing else.
@@ -61,6 +54,22 @@ Rules:
 
 User question: {question}
 """
+
+
+def build_classification_prompt(
+    name: str,
+    description: str,
+    intent_items: list[tuple[str, str]],
+    question: str,
+) -> str:
+    intents = "\n".join(f"- {iid}: {desc}" for iid, desc in intent_items)
+    return _CLASSIFICATION_PROMPT.format(
+        name=name,
+        description=description,
+        intents=intents,
+        complexity_levels=", ".join(COMPLEXITY_LEVELS),
+        question=question,
+    )
 
 
 def _parse(text: str) -> dict | None:
