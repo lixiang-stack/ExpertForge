@@ -1,5 +1,4 @@
 from agent.config import AgentConfig, DomainConfig, IntentDef, StrategyDef
-from agent.llm import LLMError
 from agent.orchestrator import Orchestrator
 from agent.router import RouteResult
 
@@ -52,10 +51,10 @@ def test_run_normal_path_planner_workers_aggregator():
     result = Orchestrator(client, _config(), _domain()).run("huge task", _route(), "high-a")
     assert result == "final answer"
     assert len(client.calls) == 4
-    # planner call uses json_schema; workers + aggregator do not
+    # planner call uses json_object (json_mode=True); json_schema preserved but unused
     planner_messages, planner_model, planner_dt, planner_jm, planner_schema = client.calls[0]
-    assert planner_schema is not None
-    assert "tasks" in planner_schema["properties"]
+    assert planner_schema is None
+    assert planner_jm is True
     assert planner_dt is True
     for _, model, dt, jm, schema in client.calls:
         assert model == "high-a"
@@ -117,24 +116,17 @@ def test_run_worker_empty_output_still_aggregates():
     assert "worker1 output" in agg_user
 
 
-def test_run_planner_degrades_json_schema_to_json_mode():
-    class SchemaRejectingClient:
-        def __init__(self):
-            self.calls = []
-
-        def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False, json_schema=None):
-            self.calls.append((messages, model, json_mode, json_schema))
-            if json_schema is not None:
-                raise LLMError("response_format json_schema not supported")
-            return '{"tasks": [{"title": "t1", "instruction": "i1"}]}'
-
-    client = SchemaRejectingClient()
+def test_run_planner_uses_json_object_main_path():
+    """The planner's main path uses json_object (json_mode=True); json_schema is
+    preserved but not exercised until a provider supports it (see code TODO)."""
+    client = FakeClient([
+        '{"tasks": [{"title": "t1", "instruction": "i1"}]}',
+        "worker1 output",
+        "final answer",
+    ])
     result = Orchestrator(client, _config(), _domain()).run("huge task", _route(), "high-a")
-    assert len(client.calls) >= 2
-    messages, model, json_mode, json_schema = client.calls[0]
-    assert json_schema is not None
-    assert json_mode is False
-    messages, model, json_mode, json_schema = client.calls[1]
-    assert json_schema is None
-    assert json_mode is True
-    assert '"tasks"' in messages[0]["content"]
+    assert result == "final answer"
+    planner_messages, planner_model, planner_dt, planner_jm, planner_schema = client.calls[0]
+    assert planner_schema is None
+    assert planner_jm is True
+    assert planner_dt is True

@@ -138,22 +138,33 @@ class ClassificationService:
             self.domain.name, self.domain.description, intent_items, question
         )
         messages = [{"role": "system", "content": prompt}]
-        try:
-            text = self.client.chat_completion(
-                messages,
-                model=model,
-                disable_thinking=True,
-                json_schema=schema,
-            )
-        except LLMError:
-            # Provider rejected json_schema (capability issue): degrade once.
-            degraded_messages = [
-                {"role": "system", "content": prompt + _DEGRADED_INSTRUCTION}
-            ]
-            text = self.client.chat_completion(
-                degraded_messages,
-                model=model,
-                disable_thinking=True,
-                json_mode=True,
-            )
+        # TODO: prefer json_schema structured output once the model/provider supports it.
+        # The current provider rejects response_format=json_schema, so json_object
+        # (json_mode) is the main path for now. The json_schema path below is kept
+        # (commented out) for when a provider with json_schema support is used.
+        #
+        # try:
+        #     text = self.client.chat_completion(
+        #         messages,
+        #         model=model,
+        #         disable_thinking=True,
+        #         json_schema=schema,
+        #     )
+        # except LLMError:
+        #     # Provider rejected json_schema (capability issue): degrade once.
+        #     degraded_messages = [
+        #         {"role": "system", "content": prompt + _DEGRADED_INSTRUCTION}
+        #     ]
+        #     text = self.client.chat_completion(
+        #         degraded_messages,
+        #         model=model,
+        #         disable_thinking=True,
+        #         json_mode=True,
+        #     )
+        text = self.client.chat_completion(
+            messages,
+            model=model,
+            disable_thinking=True,
+            json_mode=True,
+        )
         return validate_classification(_parse(text), intent_ids)
