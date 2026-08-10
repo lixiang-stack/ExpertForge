@@ -40,6 +40,22 @@ def _planner_schema() -> dict:
     }
 
 
+_PLANNER_PROMPT = """You are a planning agent for an expert domain named {name}.
+
+{description}
+
+Task context:
+{context}
+
+Rules:
+- Decompose the user's complex task into 2-4 focused sub-tasks.
+- Each sub-task must be answerable by a single standalone LLM call.
+- Output ONLY a single JSON object: {{"tasks": [{{"title": "...", "instruction": "..."}}]}}
+
+User question: {question}
+"""
+
+
 class Orchestrator:
     def __init__(self, client: LLMClient, config: AgentConfig, domain: DomainConfig):
         self.client = client
@@ -48,10 +64,8 @@ class Orchestrator:
         self._processors = build_registry(domain)
 
     def _strategy_context(self, strategy: str) -> str:
-        proc = self._processors.get(strategy)
-        if proc is not None:
-            return proc.build_system_prompt()
-        return self.domain.prompts.get(strategy, "")
+        proc = self._processors[strategy]
+        return proc.build_system_prompt()
 
     def run(self, question: str, route: RouteResult, model: str) -> str:
         context = self._strategy_context(route.strategy)
@@ -71,16 +85,11 @@ class Orchestrator:
         messages = [
             {
                 "role": "system",
-                "content": (
-                    f"You are a planning agent for an expert domain named {self.domain.name}.\n\n"
-                    f"{self.domain.description}\n\n"
-                    f"Task context:\n{context}\n\n"
-                    "Rules:\n"
-                    "- Decompose the user's complex task into 2-4 focused sub-tasks.\n"
-                    "- Each sub-task must be answerable by a single standalone LLM call.\n"
-                    "- Output ONLY a single JSON object: "
-                    '{"tasks": [{"title": "...", "instruction": "..."}]}\n\n'
-                    f"User question: {question}"
+                "content": _PLANNER_PROMPT.format(
+                    name=self.domain.name,
+                    description=self.domain.description,
+                    context=context,
+                    question=question,
                 ),
             }
         ]

@@ -33,15 +33,13 @@ class Chat:
             if route.reject_reason:
                 text += f" ({route.reject_reason})"
             return ChatResponse(kind="reject", text=text)
-        if route.orchestrate:
-            model = resolve_model(self.config, self.domain, route, self.config.model)
-            answer = self.orchestrator.run(question, route, model)
-            self.history.append((question, answer))
-            return ChatResponse(kind="answer", text=answer)
         processor = self.processors.get(route.strategy)
         if processor is None:
             return ChatResponse(kind="error", text=f"No processor for strategy '{route.strategy}'")
         model = resolve_model(self.config, self.domain, route, self.config.model)
-        answer = processor.process(self.client, question, self.history, model=model)
+        if route.orchestrate:
+            answer = self.orchestrator.run(question, route, model)
+        else:
+            answer = processor.process(self.client, question, self.history, model=model)
         self.history.append((question, answer))
         return ChatResponse(kind="answer", text=answer)
