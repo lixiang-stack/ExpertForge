@@ -1,7 +1,7 @@
 {
   "base_url": "https://api.deepseek.com",
   "model": "deepseek-v4-flash",
-  "model_low": "deepseek-v4-flash",
-  "model_high": "deepseek-pro",
+  "model_low": "",
+  "model_high": "",
   "domain_dir": "domain/software_engineering"
 }

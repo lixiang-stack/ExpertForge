@@ -22,12 +22,14 @@ cp config.example.json config.json
 Edit `config.json`:
 
 - `base_url`: the OpenAI-compatible API base URL.
-- `model`: the base model, used for answers unless overridden below.
-- `model_low`: low-cost model tier for `simple` questions (falls back to `model`).
-- `model_high`: high-capability model tier for `medium`/`complex` questions (falls back to `model`).
+- `model`: the model used for classification, answers, and orchestration.
+- `model_low`: optional low-cost model tier for `simple` questions (falls back to `model`).
+- `model_high`: optional high-capability model tier for `medium`/`complex` questions (falls back to `model`).
 - `domain_dir`: path to your domain directory (see below).
 
-`classifier_model` is no longer configured — classification uses `model_low` (falling back to `model`).
+`classifier_model` is no longer configured — classification uses `model_low`
+(falling back to `model`). When `model_low`/`model_high` are empty (the default in
+`config.example.json`), all model tiers fall back to `model`.
 
 Then set your API key:
 
@@ -47,7 +49,11 @@ Each expert domain lives in its own directory, e.g. `domain/software_engineering
 - `strategies.yaml`: strategy definitions (optional per-strategy model and
   complexity gate).
 - `prompts/*.md`: one prompt per strategy (`direct`/`teaching`/`debugging`/
-  `analysis`/`code_snippet`), plus `unsupported_complex.md`.
+  `analysis`/`code_snippet`), plus `unsupported_complex.md` (still loaded for
+  backward compatibility, but complex tasks now run through the Orchestrator).
+
+Complex questions on a gated strategy run through an Orchestrator pipeline
+(Planner → Workers → Aggregator) that builds on the strategy prompt.
 
 ## Run
 
@@ -71,3 +77,48 @@ uv run python -m agent path/to/config.json
 
 Type your question at the `you >` prompt. To leave the REPL, type `exit` (or `quit`),
 or press `Ctrl-C` / `Ctrl-D`.
+
+## Testing
+
+### Unit tests
+
+Run the full unit suite (no API key required — the LLM client is mocked):
+
+```bash
+uv run pytest -q
+```
+
+### Smoke tests
+
+`tests/test_smoke.py` exercises the real agent end-to-end against the API:
+a single-shot `--ask` question returns a non-empty answer, and an
+out-of-domain question returns the rejection reply.
+
+```bash
+uv run pytest tests/test_smoke.py -v
+```
+
+### Integration tests
+
+`tests/test_integration.py` exercises deeper pipeline paths against the API:
+a complex gated question runs through the Orchestrator (Planner → Workers →
+Aggregator), and a medium question flows through a strategy processor.
+
+```bash
+uv run pytest tests/test_integration.py -v
+```
+
+### API key security
+
+The smoke and integration tests need a real `AGENT_API_KEY` and skip
+automatically when it is not set. Provide it **only** through a secure
+channel — an environment variable, a secret manager, or a CI secret — and
+never hardcode it in code or commit it to the repository:
+
+```bash
+export AGENT_API_KEY=your_key
+```
+
+For example, in CI set `AGENT_API_KEY` as a repository secret; for local
+development you can load it from a `.env` file that is git-ignored. The
+tests only read the key from `os.environ` and never log or print it.

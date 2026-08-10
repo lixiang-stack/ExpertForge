@@ -1,7 +1,7 @@
 import json
 
 from agent.config import AgentConfig, DomainConfig, IntentDef, StrategyDef
-from agent.router import COMPLEX_UNSUPPORTED, Router
+from agent.router import Router
 
 
 def _domain(**overrides):
@@ -70,6 +70,7 @@ def test_route_in_domain_maps_strategy_and_keeps_fields():
     assert result.strategy == "teaching"
     assert result.intent == "concept_explain"
     assert result.complexity == "simple"
+    assert result.orchestrate is False
 
 
 def test_route_out_of_domain_rejects():
@@ -84,15 +85,18 @@ def test_route_unknown_intent_defaults_to_direct():
     client = FakeClient([_combined(True, "bogus", "simple")])  # intent bogus → validation sets None
     result = Router(client, _config(), _domain()).route("q")
     assert result.strategy == "direct"
+    assert result.orchestrate is False
 
 
-def test_route_complex_gated_to_unsupported():
+def test_route_complex_gated_sets_orchestrate():
     client = FakeClient([_combined(True, "architecture_design", "complex")])
     result = Router(client, _config(), _domain()).route("design a big system")
-    assert result.strategy == COMPLEX_UNSUPPORTED
+    assert result.strategy == "analysis"
+    assert result.orchestrate is True
 
 
 def test_route_complex_ungated_strategy_stays():
     client = FakeClient([_combined(True, "faq", "complex")])
     result = Router(client, _config(), _domain()).route("q")
     assert result.strategy == "direct"
+    assert result.orchestrate is False

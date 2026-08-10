@@ -62,13 +62,19 @@ def test_respond_answer_appends_history():
     assert chat.history == [("what is defer", "the answer")]
 
 
-def test_respond_unsupported_complex():
-    chat = Chat(FakeClient([
+def test_respond_orchestrates_complex():
+    client = FakeClient([
         '{"in_domain": true, "intent": "troubleshooting", "complexity": "complex", "reason": "ok"}',
-    ]), _config(), _domain())
+        '{"tasks": [{"title": "t1", "instruction": "i1"}, {"title": "t2", "instruction": "i2"}]}',
+        "worker1 output",
+        "worker2 output",
+        "final answer",
+    ])
+    chat = Chat(client, _config(), _domain())
     resp = chat.respond("huge debugging task")
-    assert resp.kind == "unsupported"
-    assert resp.text == "Needs orchestrator."
+    assert resp.kind == "answer"
+    assert resp.text == "final answer"
+    assert chat.history == [("huge debugging task", "final answer")]
 
 
 def test_respond_uses_complexity_routed_model():
