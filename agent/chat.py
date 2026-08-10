@@ -6,7 +6,7 @@ from .config import AgentConfig, DomainConfig
 from .llm import LLMClient
 from .model_router import resolve_model
 from .processors.registry import build_registry
-from .router import COMPLEX_UNSUPPORTED, Router
+from .router import Router
 
 
 @dataclass
@@ -31,10 +31,14 @@ class Chat:
             if route.reject_reason:
                 text += f" ({route.reject_reason})"
             return ChatResponse(kind="reject", text=text)
-        if route.strategy == COMPLEX_UNSUPPORTED:
-            return ChatResponse(
-                kind="unsupported", text=self.domain.prompts["unsupported_complex"]
-            )
+        if route.orchestrate:
+            processor = self.processors.get(route.strategy)
+            if processor is None:
+                return ChatResponse(kind="error", text=f"No processor for strategy '{route.strategy}'")
+            model = resolve_model(self.config, self.domain, route, self.config.model)
+            answer = processor.process(self.client, question, self.history, model=model)
+            self.history.append((question, answer))
+            return ChatResponse(kind="answer", text=answer)
         processor = self.processors.get(route.strategy)
         if processor is None:
             return ChatResponse(kind="error", text=f"No processor for strategy '{route.strategy}'")
