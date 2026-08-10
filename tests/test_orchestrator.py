@@ -1,5 +1,3 @@
-import json
-
 from agent.config import AgentConfig, DomainConfig, IntentDef, StrategyDef
 from agent.orchestrator import Orchestrator
 from agent.router import RouteResult
@@ -65,6 +63,26 @@ def test_run_normal_path_planner_workers_aggregator():
 def test_run_planner_invalid_json_degrades_to_direct():
     client = FakeClient([
         "not json",
+        "direct answer",
+    ])
+    result = Orchestrator(client, _config(), _domain()).run("huge task", _route(), "high-a")
+    assert result == "direct answer"
+    assert len(client.calls) == 2
+
+
+def test_run_planner_missing_tasks_degrades_to_direct():
+    client = FakeClient([
+        '{"other": 1}',
+        "direct answer",
+    ])
+    result = Orchestrator(client, _config(), _domain()).run("huge task", _route(), "high-a")
+    assert result == "direct answer"
+    assert len(client.calls) == 2
+
+
+def test_run_planner_malformed_item_degrades_to_direct():
+    client = FakeClient([
+        '{"tasks": [{"title": "t1", "instruction": 5}]}',
         "direct answer",
     ])
     result = Orchestrator(client, _config(), _domain()).run("huge task", _route(), "high-a")

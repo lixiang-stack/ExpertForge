@@ -102,7 +102,7 @@ class Orchestrator:
         return tasks or None
 
     def _worker(self, question: str, task: tuple[str, str], context: str, model: str) -> str:
-        title, instruction = task
+        _title, instruction = task
         messages = [
             {
                 "role": "system",
