@@ -68,10 +68,26 @@ def test_route_complex_ungated_strategy_stays():
 
 Also add `assert result.orchestrate is False` to `test_route_in_domain_maps_strategy_and_keeps_fields` and `test_route_unknown_intent_defaults_to_direct`.
 
+Also update `tests/test_chat.py::test_respond_unsupported_complex` — since the router no longer produces `complex_unsupported`, this test's expected behavior changes. Until the Orchestrator exists (Task 2), complex gated tasks temporarily fall back to the strategy's processor, so this test becomes a processor-fallback test:
+
+```python
+def test_respond_complex_gated_falls_back_to_processor():
+    chat = Chat(FakeClient([
+        '{"in_domain": true, "intent": "troubleshooting", "complexity": "complex", "reason": "ok"}',
+        "debug answer",
+    ]), _config(), _domain())
+    resp = chat.respond("huge debugging task")
+    assert resp.kind == "answer"
+    assert resp.text == "debug answer"
+    assert chat.history == [("huge debugging task", "debug answer")]
+```
+
+Note: `test_chat.py`'s `_domain()` fixture has `strategies={"debugging": StrategyDef("debugging", complexity_gate=True)}` and prompts include `"debugging"`, so the fallback goes through the `DebuggingProcessor`. This test will be replaced again in Task 3 with the orchestrator version.
+
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest tests/test_router.py -v`
-Expected: FAIL — `RouteResult` has no attribute `orchestrate`; `COMPLEX_UNSUPPORTED` import error.
+Run: `uv run pytest tests/test_router.py tests/test_chat.py -v`
+Expected: FAIL — `RouteResult` has no attribute `orchestrate`; `COMPLEX_UNSUPPORTED` import error in both files.
 
 - [ ] **Step 3: Implement** — in `agent/router.py`:
 
@@ -105,21 +121,40 @@ Change `route()`'s tail to:
         )
 ```
 
+**Also in `agent/chat.py`** — the temporary fallback keeps the suite green until the Orchestrator exists (Task 2). Remove `COMPLEX_UNSUPPORTED` from the router import, and replace the `COMPLEX_UNSUPPORTED` branch with an `orchestrate` branch that currently routes through the existing processor (this branch is switched to `orchestrator.run` in Task 3):
+
+```python
+from .router import Router
+```
+
+Replace in `respond()`:
+
+```python
+        if route.orchestrate:
+            processor = self.processors.get(route.strategy)
+            if processor is None:
+                return ChatResponse(kind="error", text=f"No processor for strategy '{route.strategy}'")
+            model = resolve_model(self.config, self.domain, route, self.config.model)
+            answer = processor.process(self.client, question, self.history, model=model)
+            self.history.append((question, answer))
+            return ChatResponse(kind="answer", text=answer)
+```
+
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest tests/test_router.py -v`
+Run: `uv run pytest tests/test_router.py tests/test_chat.py -v`
 Expected: all pass.
 
 - [ ] **Step 5: Check for other `COMPLEX_UNSUPPORTED` / `unsupported` references**
 
-Run: `rg -n "COMPLEX_UNSUPPORTED|complex_unsupported" agent/ tests/`
-Expected: only `agent/chat.py` still references `COMPLEX_UNSUPPORTED` (fixed in Task 3). No other references.
+Run: `rg -n "COMPLEX_UNSUPPORTED|complex_unsupported|kind=\"unsupported\"" agent/ tests/`
+Expected: no matches.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add agent/router.py tests/test_router.py
-git commit -m "feat: add RouteResult.orchestrate flag, stop mapping complex to unsupported"
+git add agent/router.py agent/chat.py tests/test_router.py tests/test_chat.py
+git commit -m "feat: add RouteResult.orchestrate flag, route complex to strategy processor fallback"
 ```
 
 ---
@@ -430,7 +465,7 @@ git commit -m "feat: add Orchestrator pipeline (planner/workers/aggregator) with
 - Consumes: `Orchestrator` from `agent/orchestrator.py` (Task 2); `resolve_model` from `agent/model_router.py`.
 - Produces: `Chat.respond()` dispatches to the Orchestrator when `route.orchestrate` is True; no more `unsupported` responses.
 
-- [ ] **Step 1: Write the failing test** — in `tests/test_chat.py`, replace `test_respond_unsupported_complex` with:
+- [ ] **Step 1: Write the failing test** — in `tests/test_chat.py`, replace `test_respond_complex_gated_falls_back_to_processor` (the temporary Task 1 test) with the orchestrator version:
 
 ```python
 def test_respond_orchestrates_complex():
@@ -453,18 +488,11 @@ Note: the `_domain()` fixture already declares `strategies={"debugging": Strateg
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/test_chat.py -v`
-Expected: FAIL — `Chat` still returns `kind == "unsupported"`; the orchestrate branch doesn't exist yet.
+Expected: FAIL — `Chat` still routes `route.orchestrate` through the processor fallback (Task 1 state); the FakeClient for the orchestrator path consumes the planner/worker/aggregator responses as processor output, so `resp.text` won't equal `"final answer"`.
 
 - [ ] **Step 3: Implement** — in `agent/chat.py`:
 
-Change the import line:
-
-```python
-from .orchestrator import Orchestrator
-from .router import Router
-```
-
-(remove `COMPLEX_UNSUPPORTED` from the router import). In `__init__`, add:
+Add the import:
 
 ```python
         self.orchestrator = Orchestrator(client, config, domain)
@@ -522,7 +550,7 @@ Expected: all pass.
 - [ ] **Step 5: Run full suite and confirm no stale references**
 
 Run: `uv run pytest -q`
-Expected: all pass (82 + 0 = 82; `test_respond_unsupported_complex` replaced by `test_respond_orchestrates_complex`).
+Expected: all pass (82; `test_respond_complex_gated_falls_back_to_processor` replaced by `test_respond_orchestrates_complex`).
 
 Run: `rg -n "COMPLEX_UNSUPPORTED|complex_unsupported|kind=\"unsupported\"" agent/ tests/`
 Expected: no matches.
