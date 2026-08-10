@@ -47,7 +47,12 @@ Each expert domain lives in its own directory, e.g. `domain/software_engineering
 - `strategies.yaml`: strategy definitions (optional per-strategy model and
   complexity gate).
 - `prompts/*.md`: one prompt per strategy (`direct`/`teaching`/`debugging`/
-  `analysis`/`code_snippet`), plus `unsupported_complex.md`.
+  `analysis`/`code_snippet`), plus `unsupported_complex.md` (still loaded for
+  backward compatibility, but complex tasks now run through the Orchestrator).
+
+Complex questions on a gated strategy run through an Orchestrator pipeline
+(Planner → Workers → Aggregator) that builds on the strategy prompt and uses the
+`model_high` tier.
 
 ## Run
 
