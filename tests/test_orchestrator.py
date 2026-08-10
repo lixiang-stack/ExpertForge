@@ -1,4 +1,5 @@
 from agent.config import AgentConfig, DomainConfig, IntentDef, StrategyDef
+from agent.llm import LLMError
 from agent.orchestrator import Orchestrator
 from agent.router import RouteResult
 
@@ -114,3 +115,26 @@ def test_run_worker_empty_output_still_aggregates():
     agg_messages = client.calls[3][0]
     agg_user = agg_messages[-1]["content"]
     assert "worker1 output" in agg_user
+
+
+def test_run_planner_degrades_json_schema_to_json_mode():
+    class SchemaRejectingClient:
+        def __init__(self):
+            self.calls = []
+
+        def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False, json_schema=None):
+            self.calls.append((messages, model, json_mode, json_schema))
+            if json_schema is not None:
+                raise LLMError("response_format json_schema not supported")
+            return '{"tasks": [{"title": "t1", "instruction": "i1"}]}'
+
+    client = SchemaRejectingClient()
+    result = Orchestrator(client, _config(), _domain()).run("huge task", _route(), "high-a")
+    assert len(client.calls) >= 2
+    messages, model, json_mode, json_schema = client.calls[0]
+    assert json_schema is not None
+    assert json_mode is False
+    messages, model, json_mode, json_schema = client.calls[1]
+    assert json_schema is None
+    assert json_mode is True
+    assert '"tasks"' in messages[0]["content"]

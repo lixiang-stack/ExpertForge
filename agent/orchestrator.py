@@ -4,7 +4,7 @@ import json
 import re
 
 from .config import AgentConfig, DomainConfig
-from .llm import LLMClient
+from .llm import LLMClient, LLMError
 from .processors.registry import build_registry
 from .router import RouteResult
 
@@ -55,6 +55,16 @@ Rules:
 User question: {question}
 """
 
+_PLANNER_DEGRADED_INSTRUCTION = """
+
+Answer in JSON only, using exactly this structure:
+{
+  "tasks": [
+    {"title": "<short sub-task title>", "instruction": "<standalone sub-task instruction>"}
+  ]
+}
+"""
+
 
 class Orchestrator:
     def __init__(self, client: LLMClient, config: AgentConfig, domain: DomainConfig):
@@ -82,20 +92,25 @@ class Orchestrator:
     def _plan(
         self, question: str, strategy: str, context: str, model: str
     ) -> list[tuple[str, str]] | None:
-        messages = [
-            {
-                "role": "system",
-                "content": _PLANNER_PROMPT.format(
-                    name=self.domain.name,
-                    description=self.domain.description,
-                    context=context,
-                    question=question,
-                ),
-            }
-        ]
-        text = self.client.chat_completion(
-            messages, model=model, disable_thinking=True, json_schema=_planner_schema()
+        prompt = _PLANNER_PROMPT.format(
+            name=self.domain.name,
+            description=self.domain.description,
+            context=context,
+            question=question,
         )
+        messages = [{"role": "system", "content": prompt}]
+        try:
+            text = self.client.chat_completion(
+                messages, model=model, disable_thinking=True, json_schema=_planner_schema()
+            )
+        except LLMError:
+            # Provider rejected json_schema (capability issue): degrade once.
+            degraded_messages = [
+                {"role": "system", "content": prompt + _PLANNER_DEGRADED_INSTRUCTION}
+            ]
+            text = self.client.chat_completion(
+                degraded_messages, model=model, disable_thinking=True, json_mode=True
+            )
         data = _parse_json(text)
         if not data or not isinstance(data.get("tasks"), list):
             return None
@@ -119,7 +134,7 @@ class Orchestrator:
             },
             {"role": "user", "content": question},
         ]
-        return self.client.chat_completion(messages, model=model)
+        return self.client.chat_completion(messages, model=model, disable_thinking=True)
 
     def _aggregate(
         self,
@@ -148,11 +163,11 @@ class Orchestrator:
             },
             {"role": "user", "content": user_content},
         ]
-        return self.client.chat_completion(messages, model=model)
+        return self.client.chat_completion(messages, model=model, disable_thinking=True)
 
     def _direct_answer(self, question: str, strategy: str, context: str, model: str) -> str:
         messages = [
             {"role": "system", "content": context},
             {"role": "user", "content": question},
         ]
-        return self.client.chat_completion(messages, model=model)
+        return self.client.chat_completion(messages, model=model, disable_thinking=True)
