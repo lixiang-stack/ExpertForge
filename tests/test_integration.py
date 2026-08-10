@@ -30,14 +30,8 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture(scope="module")
 def live_chat(tmp_path_factory):
-    """Build a real Chat wired to the live API.
-
-    Uses the fast deepseek-v4-flash for all tiers so the pipeline runs in seconds;
-    the goal is to verify routing/processing/orchestration end-to-end, not to
-    benchmark the slow high-end reasoning model.
-    """
+    """Build a real Chat wired to the live API (domain_dir made absolute)."""
     example = json.loads((REPO_ROOT / "config.example.json").read_text(encoding="utf-8"))
-    example["model_high"] = "deepseek-v4-flash"
     config_path = tmp_path_factory.mktemp("live") / "config.json"
     config_path.write_text(
         json.dumps({**example, "domain_dir": str(REPO_ROOT / example["domain_dir"])}),

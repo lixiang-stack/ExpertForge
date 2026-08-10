@@ -22,12 +22,14 @@ cp config.example.json config.json
 Edit `config.json`:
 
 - `base_url`: the OpenAI-compatible API base URL.
-- `model`: the base model, used for answers unless overridden below.
-- `model_low`: low-cost model tier for `simple` questions (falls back to `model`).
-- `model_high`: high-capability model tier for `medium`/`complex` questions (falls back to `model`).
+- `model`: the model used for classification, answers, and orchestration.
+- `model_low`: optional low-cost model tier for `simple` questions (falls back to `model`).
+- `model_high`: optional high-capability model tier for `medium`/`complex` questions (falls back to `model`).
 - `domain_dir`: path to your domain directory (see below).
 
-`classifier_model` is no longer configured — classification uses `model_low` (falling back to `model`).
+`classifier_model` is no longer configured — classification uses `model_low`
+(falling back to `model`). When `model_low`/`model_high` are empty (the default in
+`config.example.json`), all model tiers fall back to `model`.
 
 Then set your API key:
 
@@ -51,8 +53,7 @@ Each expert domain lives in its own directory, e.g. `domain/software_engineering
   backward compatibility, but complex tasks now run through the Orchestrator).
 
 Complex questions on a gated strategy run through an Orchestrator pipeline
-(Planner → Workers → Aggregator) that builds on the strategy prompt and uses the
-`model_high` tier.
+(Planner → Workers → Aggregator) that builds on the strategy prompt.
 
 ## Run
 
