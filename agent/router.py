@@ -7,7 +7,6 @@ from .config import AgentConfig, DomainConfig
 from .llm import LLMClient
 
 DEFAULT_STRATEGY = "direct"
-COMPLEX_UNSUPPORTED = "complex_unsupported"
 
 
 @dataclass
@@ -17,6 +16,7 @@ class RouteResult:
     intent: str | None = None
     complexity: str | None = None
     reject_reason: str = ""
+    orchestrate: bool = False
 
 
 class Router:
@@ -34,12 +34,14 @@ class Router:
             )
         intent_id = result.intent
         strategy = self.domain.intent_mapping.get(intent_id, DEFAULT_STRATEGY)
+        orchestrate = False
         strategy_def = self.domain.strategies.get(strategy)
         if strategy_def and strategy_def.complexity_gate and result.complexity == "complex":
-            strategy = COMPLEX_UNSUPPORTED
+            orchestrate = True
         return RouteResult(
             in_domain=True,
             strategy=strategy,
             intent=intent_id,
             complexity=result.complexity,
+            orchestrate=orchestrate,
         )

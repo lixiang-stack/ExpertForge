@@ -55,9 +55,9 @@ def test_classify_single_call_returns_all_fields():
     messages, model, disable_thinking, json_mode, json_schema = client.calls[0]
     assert model == "cm"
     assert disable_thinking is True
-    assert json_mode is False
-    assert json_schema is not None
-    assert "intent" in json_schema["properties"]
+    assert json_mode is True
+    assert json_schema is None
+    assert "intent" in messages[0]["content"]
 
 
 def test_classify_garbage_text_falls_back_reject():
@@ -77,7 +77,8 @@ def test_classify_out_of_domain_accepts_null():
     assert result.intent is None
     assert result.complexity is None
     assert len(client.calls) == 1
-    assert client.calls[0][4] is not None
+    assert client.calls[0][3] is True  # json_mode is the main path
+    assert client.calls[0][4] is None  # json_schema preserved but unused
 
 
 def test_validate_non_bool_in_domain_falls_back_reject():
@@ -131,31 +132,21 @@ def test_schema_enum_derived_from_intent_ids():
     assert schema["required"] == ["in_domain", "intent", "complexity", "reason"]
 
 
-def test_degrade_to_json_mode_when_schema_unsupported():
-    class SchemaRejectingClient:
-        def __init__(self):
-            self.calls = []
-
-        def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False, json_schema=None):
-            self.calls.append((messages, disable_thinking, json_mode, json_schema))
-            if json_schema is not None:
-                raise LLMError("response_format json_schema not supported")
-            return '{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}'
-
-    client = SchemaRejectingClient()
+def test_classify_uses_json_mode_main_path():
+    """The main path uses json_object (json_mode=True); json_schema is preserved
+    but not exercised until a provider supports it (see code TODO)."""
+    client = FakeClient([
+        '{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}',
+    ])
     result = ClassificationService(client, _domain()).classify("q")
     assert result.in_domain is True
-    assert result.intent == "faq"
-    assert len(client.calls) == 2
-    messages, disable_thinking, json_mode, json_schema = client.calls[0]
-    assert json_schema is not None
-    messages, disable_thinking, json_mode, json_schema = client.calls[1]
-    assert json_schema is None
+    assert len(client.calls) == 1
+    messages, model, disable_thinking, json_mode, json_schema = client.calls[0]
     assert json_mode is True
-    assert "JSON only" in messages[0]["content"] or '"in_domain"' in messages[0]["content"]
+    assert json_schema is None
 
 
-def test_degrade_second_call_also_fails_propagates():
+def test_classify_api_failure_propagates():
     class AlwaysFailingClient:
         def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False, json_schema=None):
             raise LLMError("boom")
