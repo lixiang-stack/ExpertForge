@@ -21,6 +21,7 @@ def _domain():
         },
         intent_mapping={},
         strategies={},
+        default_strategy="none",
         prompts={},
     )
 

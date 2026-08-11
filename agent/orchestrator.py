@@ -5,7 +5,7 @@ import re
 
 from .config import AgentConfig, DomainConfig
 from .llm import LLMClient, LLMError
-from .processors.registry import build_registry
+from .strategy import build_registry
 from .router import RouteResult
 
 

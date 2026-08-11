@@ -6,7 +6,7 @@ from .config import AgentConfig, DomainConfig
 from .llm import LLMClient
 from .model_router import resolve_model
 from .orchestrator import Orchestrator
-from .processors.registry import build_registry
+from .strategy import build_registry
 from .router import Router
 
 
@@ -33,9 +33,7 @@ class Chat:
             if route.reject_reason:
                 text += f" ({route.reject_reason})"
             return ChatResponse(kind="reject", text=text)
-        processor = self.processors.get(route.strategy)
-        if processor is None:
-            return ChatResponse(kind="error", text=f"No processor for strategy '{route.strategy}'")
+        processor = self.processors[route.strategy]
         model = resolve_model(self.config, self.domain, route, self.config.model)
         if route.orchestrate:
             answer = self.orchestrator.run(question, route, model)

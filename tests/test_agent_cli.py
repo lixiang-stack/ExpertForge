@@ -21,7 +21,7 @@ def _write_domain(tmp_path):
     }, ensure_ascii=False), encoding="utf-8")
     (base / "intents.yaml").write_text("- id: faq\n  description: quick\n", encoding="utf-8")
     (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
-    (base / "strategies.yaml").write_text("direct:\n", encoding="utf-8")
+    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
     (base / "prompts" / "direct.md").write_text(
         "Direct {name} {description} {structure}", encoding="utf-8"
     )
