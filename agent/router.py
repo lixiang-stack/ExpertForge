@@ -6,8 +6,6 @@ from .classification import ClassificationService
 from .config import AgentConfig, DomainConfig
 from .llm import LLMClient
 
-DEFAULT_STRATEGY = "direct"
-
 
 @dataclass
 class RouteResult:
@@ -33,7 +31,7 @@ class Router:
                 in_domain=False, strategy="reject", reject_reason=result.reason
             )
         intent_id = result.intent
-        strategy = self.domain.intent_mapping.get(intent_id, DEFAULT_STRATEGY)
+        strategy = self.domain.intent_mapping.get(intent_id, self.domain.default_strategy)
         orchestrate = False
         strategy_def = self.domain.strategies.get(strategy)
         if strategy_def and strategy_def.complexity_gate and result.complexity == "complex":
