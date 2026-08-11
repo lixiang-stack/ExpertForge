@@ -106,6 +106,7 @@ class StrategyDef:
     id: str
     model: str | None = None
     complexity_gate: bool = False
+    default: bool = False
 
 
 @dataclass
@@ -116,6 +117,7 @@ class DomainConfig:
     intents: dict[str, IntentDef]
     intent_mapping: dict[str, str]
     strategies: dict[str, StrategyDef]
+    default_strategy: str
     prompts: dict[str, str]
 
 
@@ -198,6 +200,7 @@ def load_domain_config(domain_dir: str) -> DomainConfig:
     if not isinstance(strategies_data, dict):
         raise ConfigError(f"strategies.yaml must contain a mapping: {base / 'strategies.yaml'}")
     strategies: dict[str, StrategyDef] = {}
+    configured_default = None
     for sid, item in strategies_data.items():
         if isinstance(item, dict):
             model = item.get("model")
@@ -205,7 +208,10 @@ def load_domain_config(domain_dir: str) -> DomainConfig:
                 id=sid,
                 model=model if isinstance(model, str) and model else None,
                 complexity_gate=bool(item.get("complexity_gate", False)),
+                default=bool(item.get("default", False)),
             )
+            if item.get("default"):
+                configured_default = sid
         else:
             strategies[sid] = StrategyDef(id=sid)
 
@@ -215,6 +221,15 @@ def load_domain_config(domain_dir: str) -> DomainConfig:
                 f"Mapping for intent '{intent_id}' references unknown strategy "
                 f"'{strategy_id}' in {base / 'intent_mapping.yaml'}"
             )
+
+    if configured_default is None:
+        raise ConfigError(
+            f"Exactly one strategy in {base / 'strategies.yaml'} must have default: true"
+        )
+    if sum(1 for sdef in strategies.values() if sdef.default) != 1:
+        raise ConfigError(
+            f"Only one strategy in {base / 'strategies.yaml'} may have default: true"
+        )
 
     prompts: dict[str, str] = {}
     prompt_dir = base / "prompts"
@@ -229,5 +244,6 @@ def load_domain_config(domain_dir: str) -> DomainConfig:
         intents=intents,
         intent_mapping=intent_mapping,
         strategies=strategies,
+        default_strategy=configured_default,
         prompts=prompts,
     )
