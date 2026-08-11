@@ -303,7 +303,7 @@ def test_load_domain_config_mapping_unknown_intent(tmp_path):
     (base / "intents.yaml").write_text("- id: faq\n  description: q\n", encoding="utf-8")
     (base / "intent_mapping.yaml").write_text("bogus_intent: direct\n", encoding="utf-8")
     (base / "strategies.yaml").write_text("direct:\n", encoding="utf-8")
-    (base / "prompts" / "direct.md").write_text("d {structure}", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
     (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
     with pytest.raises(ConfigError):
         load_domain_config(str(base))
@@ -318,7 +318,7 @@ def test_load_domain_config_missing_prompt(tmp_path):
     (base / "intents.yaml").write_text("- id: faq\n  description: q\n", encoding="utf-8")
     (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
     (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
-    (base / "prompts" / "direct.md").write_text("d {structure}", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
     with pytest.raises(ConfigError) as exc_info:
         load_domain_config(str(base))
     assert "unsupported_complex.md" in str(exc_info.value)
