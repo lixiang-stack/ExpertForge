@@ -105,7 +105,7 @@ uv run pytest tests/test_smoke.py -v
 
 `tests/test_integration.py` exercises deeper pipeline paths against the API:
 a complex gated question runs through the Orchestrator (Planner → Workers →
-Aggregator), and a medium question flows through a strategy processor.
+Aggregator), and a medium question flows through a strategy.
 
 ```bash
 uv run pytest tests/test_integration.py -v
