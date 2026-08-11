@@ -46,14 +46,17 @@ Each expert domain lives in its own directory, e.g. `domain/software_engineering
 - `domain.json`: domain name, description, and out-of-domain reply.
 - `intents.yaml`: the intents the classifier can detect.
 - `intent_mapping.yaml`: maps each intent to a strategy.
-- `strategies.yaml`: strategy definitions (optional per-strategy model and
-  complexity gate).
-- `prompts/*.md`: one prompt per strategy (`direct`/`teaching`/`debugging`/
-  `analysis`/`code_snippet`), plus `unsupported_complex.md` (still loaded for
-  backward compatibility, but complex tasks now run through the Orchestrator).
+- `strategies.yaml`: strategy definitions — per-strategy optional `model`,
+  `complexity_gate`, and exactly one `default: true` marker (the strategy used for
+  unmapped intents).
+- `prompts/*.md`: one fully self-contained system prompt per strategy. Each file
+  embeds the strategy's answer structure and domain context directly, with **no**
+  placeholders (`{name}`/`{description}`/`{structure}`).
 
-Complex questions on a gated strategy run through an Orchestrator pipeline
-(Planner → Workers → Aggregator) that builds on the strategy prompt.
+Strategies are fully data-driven: swapping in a new expert domain means writing a new
+domain directory — no code changes. Complex questions on a gated strategy run through
+an Orchestrator pipeline (Planner → Workers → Aggregator) that builds on the strategy
+prompt.
 
 ## Run
 
