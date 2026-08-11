@@ -1,8 +1,8 @@
 # ExpertForge
 
 A configurable domain-expert agent. Define an expert domain in a directory, and the
-agent classifies each question's intent and complexity, routes it to one of five
-strategy processors, and answers via an OpenAI-compatible API. Use the interactive
+agent classifies each question's intent and complexity, routes it to a strategy, and
+answers via an OpenAI-compatible API. Use the interactive
 REPL or the single-shot `--ask` entry point.
 
 ## Install
