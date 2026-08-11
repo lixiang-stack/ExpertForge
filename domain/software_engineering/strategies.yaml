@@ -1,15 +1,11 @@
 direct:
-  model: null
+  default: true
   complexity_gate: false
 teaching:
-  model: null
   complexity_gate: true
 debugging:
-  model: null
   complexity_gate: true
 analysis:
-  model: null
   complexity_gate: true
 code_snippet:
-  model: null
   complexity_gate: true

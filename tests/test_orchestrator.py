@@ -10,9 +10,10 @@ def _domain():
         out_of_domain_reply="Out.",
         intents={"troubleshooting": IntentDef("troubleshooting", "debug")},
         intent_mapping={"troubleshooting": "debugging"},
-        strategies={"debugging": StrategyDef("debugging", complexity_gate=True)},
+        strategies={"debugging": StrategyDef("debugging", complexity_gate=True, default=True)},
+        default_strategy="debugging",
         prompts={
-            "debugging": "Debug {name} {description} {structure}",
+            "debugging": "Debugging system prompt.",
         },
     )
 

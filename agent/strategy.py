@@ -1,21 +1,15 @@
 from __future__ import annotations
 
+from .config import DomainConfig
 
-class Processor:
-    strategy_id = "base"
 
-    def __init__(self, prompt_template: str, domain_name: str, domain_description: str):
+class Strategy:
+    def __init__(self, strategy_id: str, prompt_template: str):
+        self.strategy_id = strategy_id
         self.prompt_template = prompt_template
-        self.domain_name = domain_name
-        self.domain_description = domain_description
-
-    @property
-    def structure(self) -> str:
-        return ""
 
     def build_system_prompt(self) -> str:
-        template = self.prompt_template.replace("{structure}", self.structure)
-        return template.format(name=self.domain_name, description=self.domain_description)
+        return self.prompt_template
 
     def build_messages(
         self,
@@ -33,3 +27,10 @@ class Processor:
 
     def process(self, client, question: str, history: list[tuple[str, str]], *, model: str | None = None) -> str:
         return client.chat_completion(self.build_messages(history, question), model=model)
+
+
+def build_registry(domain: DomainConfig) -> dict[str, Strategy]:
+    return {
+        sid: Strategy(sid, domain.prompts[sid])
+        for sid in domain.strategies
+    }

@@ -13,12 +13,13 @@ def _domain():
         },
         intent_mapping={"faq": "direct", "troubleshooting": "debugging"},
         strategies={
-            "direct": StrategyDef("direct"),
+            "direct": StrategyDef("direct", default=True),
             "debugging": StrategyDef("debugging", complexity_gate=True),
         },
+        default_strategy="direct",
         prompts={
-            "direct": "Direct {name} {description} {structure}",
-            "debugging": "Debug {name} {description} {structure}",
+            "direct": "Direct answer prompt.",
+            "debugging": "Debugging prompt.",
             "unsupported_complex": "Needs orchestrator.",
         },
     )

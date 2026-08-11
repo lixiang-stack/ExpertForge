@@ -22,6 +22,7 @@ def _domain(strategy_model=None):
         intents={"faq": IntentDef("faq", "quick")},
         intent_mapping={"faq": "direct"},
         strategies=strategies,
+        default_strategy="direct",
         prompts={},
     )
 

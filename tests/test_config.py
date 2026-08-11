@@ -228,14 +228,14 @@ def _write_domain(tmp_path, **overrides):
         "concept_explain: teaching\nfaq: direct\n", encoding="utf-8"
     )
     (base / "strategies.yaml").write_text(
-        "teaching:\n  complexity_gate: true\ndirect:\n  model: model-direct\n",
+        "teaching:\n  complexity_gate: true\ndirect:\n  model: model-direct\n  default: true\n",
         encoding="utf-8",
     )
     (base / "prompts" / "teaching.md").write_text(
-        "teach {name} {description} {structure}", encoding="utf-8"
+        "teach self-contained", encoding="utf-8"
     )
     (base / "prompts" / "direct.md").write_text(
-        "direct {name} {description} {structure}", encoding="utf-8"
+        "direct self-contained", encoding="utf-8"
     )
     (base / "prompts" / "unsupported_complex.md").write_text("unsupported", encoding="utf-8")
     return str(base)
@@ -252,7 +252,8 @@ def test_load_domain_config_basic(tmp_path):
     assert domain.strategies["teaching"].complexity_gate is True
     assert domain.strategies["direct"].model == "model-direct"
     assert domain.strategies["direct"].complexity_gate is False
-    assert "teach {name}" in domain.prompts["teaching"]
+    assert domain.default_strategy == "direct"
+    assert "teach self-contained" in domain.prompts["teaching"]
     assert "unsupported" in domain.prompts["unsupported_complex"]
 
 
@@ -264,7 +265,8 @@ def test_load_domain_config_out_of_domain_reply_default(tmp_path):
     )
     (base / "intents.yaml").write_text("", encoding="utf-8")
     (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
-    (base / "strategies.yaml").write_text("", encoding="utf-8")
+    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
     (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
     domain = load_domain_config(str(base))
     assert domain.out_of_domain_reply == (
@@ -301,7 +303,7 @@ def test_load_domain_config_mapping_unknown_intent(tmp_path):
     (base / "intents.yaml").write_text("- id: faq\n  description: q\n", encoding="utf-8")
     (base / "intent_mapping.yaml").write_text("bogus_intent: direct\n", encoding="utf-8")
     (base / "strategies.yaml").write_text("direct:\n", encoding="utf-8")
-    (base / "prompts" / "direct.md").write_text("d {structure}", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
     (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
     with pytest.raises(ConfigError):
         load_domain_config(str(base))
@@ -315,8 +317,40 @@ def test_load_domain_config_missing_prompt(tmp_path):
     )
     (base / "intents.yaml").write_text("- id: faq\n  description: q\n", encoding="utf-8")
     (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
-    (base / "strategies.yaml").write_text("direct:\n", encoding="utf-8")
-    (base / "prompts" / "direct.md").write_text("d {structure}", encoding="utf-8")
+    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
     with pytest.raises(ConfigError) as exc_info:
         load_domain_config(str(base))
     assert "unsupported_complex.md" in str(exc_info.value)
+
+
+def _write_domain_with_default(tmp_path, strategies_yaml):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(json.dumps({
+        "name": "x", "description": "d",
+    }), encoding="utf-8")
+    (base / "intents.yaml").write_text("", encoding="utf-8")
+    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
+    (base / "strategies.yaml").write_text(strategies_yaml, encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
+    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
+    return str(base)
+
+
+def test_load_domain_config_resolves_default_strategy(tmp_path):
+    domain = load_domain_config(_write_domain_with_default(
+        tmp_path, "direct:\n  default: true\n"))
+    assert domain.default_strategy == "direct"
+    assert domain.strategies["direct"].default is True
+
+
+def test_load_domain_config_zero_defaults_raises(tmp_path):
+    with pytest.raises(ConfigError):
+        load_domain_config(_write_domain_with_default(tmp_path, "direct:\n"))
+
+
+def test_load_domain_config_multiple_defaults_raises(tmp_path):
+    with pytest.raises(ConfigError):
+        load_domain_config(_write_domain_with_default(
+            tmp_path, "direct:\n  default: true\nteaching:\n  default: true\n"))

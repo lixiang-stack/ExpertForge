@@ -382,7 +382,7 @@ git commit -m "feat: route generator model by complexity via resolve_model"
   "base_url": "https://api.deepseek.com",
   "model": "deepseek-v4-flash",
   "model_low": "deepseek-v4-flash",
-  "model_high": "deepseek-pro",
+  "model_high": "deepseek-v4-pro",
   "domain_dir": "domain/software_engineering"
 }
 ```

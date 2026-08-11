@@ -22,11 +22,12 @@ def _domain(**overrides):
             "architecture_design": "analysis",
         },
         "strategies": {
-            "teaching": StrategyDef("teaching", complexity_gate=True),
+            "teaching": StrategyDef("teaching", complexity_gate=True, default=True),
             "direct": StrategyDef("direct"),
             "debugging": StrategyDef("debugging", complexity_gate=True),
             "analysis": StrategyDef("analysis", complexity_gate=True),
         },
+        "default_strategy": "teaching",
         "prompts": {},
     }
     default.update(overrides)
@@ -81,10 +82,10 @@ def test_route_out_of_domain_rejects():
     assert result.reject_reason == "unrelated"
 
 
-def test_route_unknown_intent_defaults_to_direct():
+def test_route_unknown_intent_falls_back_to_default():
     client = FakeClient([_combined(True, "bogus", "simple")])  # intent bogus → validation sets None
     result = Router(client, _config(), _domain()).route("q")
-    assert result.strategy == "direct"
+    assert result.strategy == "teaching"
     assert result.orchestrate is False
 
 

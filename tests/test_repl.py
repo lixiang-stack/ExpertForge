@@ -14,9 +14,10 @@ def _domain():
         out_of_domain_reply="Out of domain.",
         intents={"faq": IntentDef("faq", "quick")},
         intent_mapping={"faq": "direct"},
-        strategies={"direct": StrategyDef("direct")},
+        strategies={"direct": StrategyDef("direct", default=True)},
+        default_strategy="direct",
         prompts={
-            "direct": "Direct {name} {description} {structure}",
+            "direct": "Direct answer prompt.",
             "unsupported_complex": "unsupported",
         },
     )

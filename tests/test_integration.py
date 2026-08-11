@@ -1,7 +1,7 @@
 """Live integration tests: exercise deeper pipeline paths against the API.
 
 - complex question on a gated strategy → Orchestrator (Planner → Workers → Aggregator)
-- medium question → strategy processor (single call)
+- medium question → strategy (single call)
 
 These skip automatically when `AGENT_API_KEY` is not set. Provide the key via
 the environment / secret manager / CI secret — never hardcode or commit it:
@@ -58,7 +58,7 @@ def test_integration_complex_question_orchestrates(live_chat):
 
 
 def test_integration_medium_question_uses_processor(live_chat):
-    """A medium question should return a non-empty answer through the processor path."""
+    """A medium question should return a non-empty answer through the strategy path."""
     response = live_chat.respond(
         "Explain how Go's context package is designed and why."
     )
