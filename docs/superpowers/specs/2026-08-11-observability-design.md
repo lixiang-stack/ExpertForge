@@ -13,7 +13,7 @@
 3. 提供 CLI 汇总表、HTML 报告、终端实时展示三种消费形态，跨会话累积、历史聚合。
 4. 不计算货币成本，只记录 token 用量。
 
-**硬性约束：** 业务模块（`chat.py`/`orchestrator.py`/`classification.py`/`strategy.py`/`router.py`）源码零改动（唯一例外见 §4：`llm.py` 返回对象化，6 处调用点加 `.text`）。观测能力由可插拔插件包自动化提供，关闭时零行为差异、零开销。
+**硬性约束：** 业务模块（`chat.py`/`orchestrator.py`/`classification.py`/`strategy.py`/`router.py`）源码零改动（唯一例外见 §4.2：`llm.py` 增加 2 行记录 `last_usage`）。观测能力由可插拔插件包自动化提供，关闭时零行为差异、零开销。
 
 ## 2. Architecture
 
@@ -110,26 +110,32 @@ class SpanStack:
 - 调用成功：记录 `llm_call`（phase、model、usage、latency_ms、status=ok）。
 - 调用失败（`LLMError`）：记录 `llm_call`（status=error、error），随后**重新抛出原异常**（不吞）。
 
-### 4.2 LLMClient 返回对象化（对业务的最小侵入）
+### 4.2 LLMClient 记录 last_usage（零业务改动）
 
 现状：`LLMClient.chat_completion` 返回 `str`，丢弃了 `usage`。
 
-改造：`agent/llm.py` 的 `chat_completion` 返回 `ChatCompletionResult(text, usage, model)`：
+改造：`agent/llm.py` 仅加 2 行，`chat_completion` 仍返回 `str`，业务调用点与现有测试**零改动**：
 
 ```python
-@dataclass
-class ChatCompletionResult:
-    text: str
-    usage: Usage | None      # prompt_tokens / completion_tokens / total_tokens
-    model: str
+# agent/llm.py
+import threading
+
+class LLMClient:
+    def __init__(...):
+        ...
+        self._usage_local = threading.local()   # 每线程独立存储
+
+    def chat_completion(self, ...) -> str:
+        resp = self.client.chat.completions.create(**kwargs)
+        self._usage_local.usage = resp.usage     # 返回文本前记下 usage
+        return resp.choices[0].message.content or ""
 ```
 
-业务调用点改 `.text`，共 6 处：
-- `strategy.py:29` `client.chat_completion(...)` → `....text`（1 处）
-- `orchestrator.py` `_plan`/`_worker`/`_aggregate`/`_direct_answer`（4 处）
-- `classification.py:164` `client.chat_completion(...)` → `....text`（1 处）
+- 用 `threading.local()` 而非实例属性，确保未来并行 worker（如 `ThreadPoolExecutor`）下每个线程读到的是**本次调用**的 usage，互不覆盖。
+- `TracedLLMClient` 在**同线程同步**调用内层后，立即读取 `self._inner._usage_local.usage`（无竞态，见 §4.1）。
+- 供应商不返回 usage 时，`_usage_local.usage` 为 `None`，记录 `usage: null`。
 
-这是对业务模块唯一的改动。`chat_completion_stream` 保持返回 `Iterator[str]` 不变，观测层第 1 版不包装流式调用，在 `install()` 时跳过并注释说明（主流程不使用流式，流式仅测试覆盖）。
+`chat_completion_stream` 保持返回 `Iterator[str]` 不变，观测层第 1 版不包装流式调用，在 `install()` 时跳过并注释说明（主流程不使用流式，流式仅测试覆盖）。
 
 ### 4.3 插件装配（agent/observability/patch.py）
 
@@ -198,6 +204,7 @@ expert > （回答）
 
 - `test_observability_config.py`：config 解析、enabled/disabled、phase_map 覆盖、缺省为 None。
 - `test_tracing.py`：TraceStore 写入/读回、span 栈 push/pop、trace_id 唯一、按天切分。
+- `test_llm_usage.py`：`LLMClient.last_usage` 被填充（含 threading.local 在线程间隔离）。
 - `test_observability_install.py`：
   - install 后业务对象被包装。
   - llm_call 事件带正确 phase/usage。
@@ -211,7 +218,7 @@ expert > （回答）
 ## 9. Success Criteria
 
 1. `uv run pytest -q` 全绿。
-2. 业务模块除 `llm.py` 返回对象化（6 处 `.text` 调用点）外零改动。
+2. 业务模块除 `llm.py` 增加 2 行 `last_usage` 记录外零改动。
 3. `observability.enabled=false` 时行为与现在完全一致。
 4. 启用后自动记录：每个 trace 的 classification/route/strategy/编排各阶段 token 与耗时，无需手写记录代码。
 5. CLI 表、HTML 报告、终端实时行三种消费形态可用，跨会话累积。
