@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from typing import Iterator
 
 from openai import OpenAI, OpenAIError
@@ -13,6 +14,7 @@ class LLMClient:
     def __init__(self, base_url: str, api_key: str, model: str, timeout: float = 60.0):
         self.client = OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
         self.model = model
+        self._usage_local = threading.local()
 
     def chat_completion(
         self,
@@ -46,6 +48,7 @@ class LLMClient:
                 kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
             resp = self.client.chat.completions.create(**kwargs)
             content = resp.choices[0].message.content
+            self._usage_local.usage = resp.usage
             return content or ""
         except OpenAIError as e:
             raise LLMError(f"LLM API call failed: {e}") from e

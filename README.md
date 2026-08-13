@@ -81,6 +81,27 @@ uv run python -m agent path/to/config.json
 Type your question at the `you >` prompt. To leave the REPL, type `exit` (or `quit`),
 or press `Ctrl-C` / `Ctrl-D`.
 
+## Observability
+
+Optional token/cost-free usage tracking and trace visualization. Enable it in `config.json`:
+
+```json
+{
+  "observability": { "enabled": true, "data_dir": ".observability", "phase_map": {} }
+}
+```
+
+- Every LLM call's tokens and latency are recorded automatically (classification, routing, strategy, and orchestration phases) to per-day JSONL files under `data_dir`.
+- During a REPL/`--ask` run a compact per-question line is printed after each answer, showing input tokens, output tokens, and elapsed time.
+- After a run, generate the HTML report (self-contained, with per-trace step timelines):
+
+```bash
+uv run python -m agent.observability report               # writes data_dir/report.html
+uv run python -m agent.observability report --day 2026-08-11
+```
+
+`phase_map` optionally remaps the built-in phase names (see `agent/observability/patch.py::DEFAULT_PHASES`). Disabled by default; when disabled the agent behaves exactly as before.
+
 ## Testing
 
 ### Unit tests

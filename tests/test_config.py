@@ -354,3 +354,57 @@ def test_load_domain_config_multiple_defaults_raises(tmp_path):
     with pytest.raises(ConfigError):
         load_domain_config(_write_domain_with_default(
             tmp_path, "direct:\n  default: true\nteaching:\n  default: true\n"))
+
+
+def test_load_config_without_observability(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+    })
+    cfg = load_config(path)
+    assert cfg.observability is None
+
+
+def test_load_config_observability_disabled(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "observability": {"enabled": False, "data_dir": "obs/"},
+    })
+    cfg = load_config(path)
+    assert cfg.observability is not None
+    assert cfg.observability.enabled is False
+    assert cfg.observability.data_dir == "obs/"
+
+
+def test_load_config_observability_enabled_with_phase_map(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "observability": {
+            "enabled": True,
+            "phase_map": {"Orchestrator._worker": "work"},
+        },
+    })
+    cfg = load_config(path)
+    assert cfg.observability.enabled is True
+    assert cfg.observability.data_dir == ".observability"          # default
+    assert cfg.observability.phase_map == {"Orchestrator._worker": "work"}
+
+
+def test_load_config_observability_ignores_non_dict(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "observability": "nope",
+    })
+    cfg = load_config(path)
+    assert cfg.observability is None

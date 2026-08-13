@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -17,6 +17,13 @@ DEFAULT_EXAMPLE_CONFIG_PATH = "config.example.json"
 
 
 @dataclass
+class ObservabilityConfig:
+    enabled: bool = False
+    data_dir: str = ".observability"
+    phase_map: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
 class AgentConfig:
     base_url: str
     model: str
@@ -24,6 +31,7 @@ class AgentConfig:
     domain_dir: str
     model_low: str | None = None
     model_high: str | None = None
+    observability: ObservabilityConfig | None = None
 
 
 def _read_json_file(path: str) -> dict:
@@ -75,6 +83,17 @@ def load_config(path: str | None = None) -> AgentConfig:
     if not isinstance(domain_dir, str) or not domain_dir:
         raise ConfigError("Missing 'domain_dir' in config.")
 
+    raw_obs = raw.get("observability")
+    observability = None
+    if isinstance(raw_obs, dict):
+        data_dir = raw_obs.get("data_dir") or ".observability"
+        phase_map = raw_obs.get("phase_map")
+        observability = ObservabilityConfig(
+            enabled=bool(raw_obs.get("enabled")),
+            data_dir=data_dir if isinstance(data_dir, str) else ".observability",
+            phase_map=phase_map if isinstance(phase_map, dict) else {},
+        )
+
     return AgentConfig(
         base_url=base_url,
         model=model,
@@ -82,6 +101,7 @@ def load_config(path: str | None = None) -> AgentConfig:
         domain_dir=domain_dir,
         model_low=model_low,
         model_high=model_high,
+        observability=observability,
     )
 
 
