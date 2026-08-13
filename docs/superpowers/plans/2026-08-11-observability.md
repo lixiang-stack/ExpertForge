@@ -260,15 +260,17 @@ In `load_config`, after `domain_dir` validation, before `return AgentConfig(...)
 ```python
     raw_obs = raw.get("observability")
     observability = None
-    if isinstance(raw_obs, dict) and raw_obs.get("enabled"):
+    if isinstance(raw_obs, dict):
         data_dir = raw_obs.get("data_dir") or ".observability"
         phase_map = raw_obs.get("phase_map")
         observability = ObservabilityConfig(
-            enabled=True,
+            enabled=bool(raw_obs.get("enabled", False)),
             data_dir=data_dir if isinstance(data_dir, str) else ".observability",
             phase_map=phase_map if isinstance(phase_map, dict) else {},
         )
 ```
+
+Note: the tests are the contract here. A present dict (even with `enabled: false`) yields a populated `ObservabilityConfig` with `enabled` preserved; `observability` is `None` only when the key is absent or not a dict. `ObservabilityConfig.enabled` remains the switch for `install()` — and `install()` treats both `enabled=False` and the absent (no config block) case identically.
 
 Add `observability=observability` to the `AgentConfig(...)` return. Also add the optional `observability` block to `config.example.json`:
 
@@ -327,8 +329,10 @@ from pathlib import Path
 
 from agent.observability.tracing import (
     TraceStore,
+    _fmt_tokens,
     current_phase,
     current_trace_id,
+    format_trace_line,
     phase,
     read_events,
     trace_span,
@@ -405,9 +409,24 @@ def test_span_stack_ctx_and_phase():
 def test_phase_noop_without_span():
     with phase("classification"):
         assert current_phase() is None
+
+
+def test_fmt_tokens_and_trace_line():
+    assert _fmt_tokens(None) == "?"
+    assert _fmt_tokens(500) == "500"
+    assert _fmt_tokens(1500) == "1.5k"
+    calls = [
+        {"phase": "classification", "total_tokens": 1234, "latency_ms": 330},
+        {"phase": "strategy.direct", "total_tokens": 3500, "latency_ms": 2100},
+    ]
+    line = format_trace_line("abc", calls)
+    assert line.startswith("[trace abc]")
+    assert "classification 0.3s/1.2k" in line
+    assert "strategy.direct 2.1s/3.5k" in line
+    assert line.endswith("| total 4734 tok 2.4s")
 ```
 
-Import names in the tests from `agent.observability.tracing`: `TraceStore`, `read_events`, `trace_span`, `phase`, `current_trace_id`, `current_phase`.
+Import names in the tests from `agent.observability.tracing`: `TraceStore`, `read_events`, `trace_span`, `phase`, `current_trace_id`, `current_phase`, `format_trace_line`, `_fmt_tokens`.
 
 - [ ] **Step 2: Run to verify they fail**
 
@@ -497,16 +516,20 @@ def read_events(data_dir: str | Path, *, day: str | None = None) -> tuple[list[d
     pattern = f"trace-{day}.jsonl" if day else "trace-*.jsonl"
     bad = 0
     events: list[dict] = []
-    for path in sorted(base.glob(pattern)):
+    try:
+        paths = sorted(base.glob(pattern))
+    except OSError:
+        return events, 1
+    for path in paths:
         try:
-            with path.open(encoding="utf-8") as f:
+            with path.open(encoding="utf-8", errors="replace") as f:
                 for line in f:
                     line = line.strip()
                     if not line:
                         continue
                     try:
                         data = json.loads(line)
-                    except json.JSONDecodeError:
+                    except (json.JSONDecodeError, ValueError):
                         bad += 1
                         continue
                     if isinstance(data, dict):
@@ -566,6 +589,27 @@ def current_phase() -> str | None:
 
 def now_millis() -> int:
     return int(datetime.now().timestamp() * 1000)
+
+
+def _fmt_tokens(n) -> str:
+    if n is None:
+        return "?"
+    if n >= 1000:
+        return f"{n / 1000:.1f}k"
+    return str(n)
+
+
+def format_trace_line(trace_id: str, calls: list[dict]) -> str:
+    parts = []
+    for c in calls:
+        ph = c.get("phase") or "?"
+        tok = _fmt_tokens(c.get("total_tokens"))
+        latency_s = (c.get("latency_ms") or 0) / 1000
+        parts.append(f"{ph} {latency_s:.1f}s/{tok}")
+    total_tokens = sum(c.get("total_tokens") or 0 for c in calls)
+    total_s = sum(c.get("latency_ms") or 0 for c in calls) / 1000
+    return f"[trace {trace_id}] " + " | ".join(parts) + \
+        f" | total {total_tokens} tok {total_s:.1f}s"
 ```
 
 - [ ] **Step 4: Run to verify they pass**
@@ -706,6 +750,7 @@ Expected: FAIL — `ModuleNotFoundError: agent.observability.client`
 from __future__ import annotations
 
 import time
+import warnings
 from typing import Iterator
 
 from agent.llm import LLMError
@@ -739,6 +784,12 @@ class TracedLLMClient:
             "ts": now_millis(),
         }
 
+    def _write(self, ev: dict) -> None:
+        try:
+            self._store.write(ev)
+        except Exception as e:  # noqa: BLE001 - observability must never break business
+            warnings.warn(f"observability: failed to write llm_call event: {e}")
+
     def chat_completion(self, messages, *, model=None, temperature=0.3, **kwargs) -> str:
         started = time.perf_counter()
         try:
@@ -751,7 +802,7 @@ class TracedLLMClient:
                        "completion_tokens": None, "total_tokens": None,
                        "latency_ms": round((time.perf_counter() - started) * 1000, 1),
                        "status": "error", "error": str(e)})
-            self._store.write(ev)
+            self._write(ev)
             raise
         p, c, t = self._usage_tokens()
         ev = self._base_event()
@@ -759,7 +810,7 @@ class TracedLLMClient:
                    "completion_tokens": c, "total_tokens": t,
                    "latency_ms": round((time.perf_counter() - started) * 1000, 1),
                    "status": "ok", "error": None})
-        self._store.write(ev)
+        self._write(ev)
         return text
 
     def chat_completion_stream(self, messages, *, model=None, temperature=0.7, **kwargs) -> Iterator[str]:
@@ -1014,8 +1065,11 @@ class Installed:
             return n
 
     def _record_decision(self, trace_id: str, ph: str, data: dict) -> None:
-        self.store.write({"type": "decision", "trace_id": trace_id, "phase": ph,
-                          "ts": now_millis(), "data": data})
+        try:
+            self.store.write({"type": "decision", "trace_id": trace_id, "phase": ph,
+                              "ts": now_millis(), "data": data})
+        except Exception as e:  # noqa: BLE001 - degrade, never break business
+            warnings.warn(f"observability: failed to record decision: {e}")
 
     def _wrap(self, key: str, target, patch_name: str) -> None:
         factories = {
@@ -1039,31 +1093,37 @@ class Installed:
         except Exception as e:  # noqa: BLE001 - degrade, never block business
             warnings.warn(f"observability: failed to patch {key}: {e}")
 
-    # Wrapper factories. `self` is the Installed instance (captured as `inst`);
-    # the wrapper's first positional arg is the business instance (chat, cls,
-    # strat, orch...). Each wrapper is a transparent passthrough when no install
-    # is active.
+    # Wrapper factories. The wrapper's first positional arg is the business
+    # instance (chat, cls, strat, orch...). Each wrapper resolves the active
+    # install via `_current_inst()` AT CALL TIME (not at wrap time) — a
+    # later re-install/apply() must write to its own store. Transparent
+    # passthrough when no install is active.
 
     def _wrap_respond(self, original, key):
-        inst = self
-
         def wrapper(chat, question):
-            if _current_inst() is None:
+            inst = _current_inst()
+            if inst is None:
                 return original(chat, question)
             with trace_span() as tid:
                 ph = inst._phase(key)
-                inst.store.write({"type": "trace_start", "trace_id": tid, "phase": ph,
-                                  "ts": now_millis(), "question": question,
-                                  "domain": getattr(chat.domain, "name", None)})
+                try:
+                    inst.store.write({"type": "trace_start", "trace_id": tid, "phase": ph,
+                                      "ts": now_millis(), "question": question,
+                                      "domain": getattr(chat.domain, "name", None)})
+                except Exception as e:  # noqa: BLE001 - degrade, never break business
+                    warnings.warn(f"observability: failed to record trace_start: {e}")
                 response = original(chat, question)
                 calls = inst.store.trace_llm_calls(tid)
                 total_tokens = sum(c.get("total_tokens") or 0 for c in calls)
                 total_lat = sum(c.get("latency_ms") or 0 for c in calls)
-                inst.store.write({"type": "trace_end", "trace_id": tid, "phase": ph,
-                                  "ts": now_millis(), "answer_len": len(response.text),
-                                  "total_llm_calls": len(calls), "total_tokens": total_tokens,
-                                  "total_latency_ms": round(total_lat, 1),
-                                  "reject": response.kind == "reject"})
+                try:
+                    inst.store.write({"type": "trace_end", "trace_id": tid, "phase": ph,
+                                      "ts": now_millis(), "answer_len": len(response.text),
+                                      "total_llm_calls": len(calls), "total_tokens": total_tokens,
+                                      "total_latency_ms": round(total_lat, 1),
+                                      "reject": response.kind == "reject"})
+                except Exception as e:  # noqa: BLE001 - degrade, never break business
+                    warnings.warn(f"observability: failed to record trace_end: {e}")
                 try:
                     if calls:
                         print(format_trace_line(tid, calls))
@@ -1073,10 +1133,9 @@ class Installed:
         return wrapper
 
     def _wrap_classify(self, original, key):
-        inst = self
-
         def wrapper(cls, question, *, model=None):
-            if _current_inst() is None:
+            inst = _current_inst()
+            if inst is None:
                 return original(cls, question, model=model)
             with phase(inst._phase(key)):
                 result = original(cls, question, model=model)
@@ -1089,10 +1148,9 @@ class Installed:
         return wrapper
 
     def _wrap_route(self, original, key):
-        inst = self
-
         def wrapper(rtr, question):
-            if _current_inst() is None:
+            inst = _current_inst()
+            if inst is None:
                 return original(rtr, question)
             with phase(inst._phase(key)):
                 result = original(rtr, question)
@@ -1106,20 +1164,18 @@ class Installed:
         return wrapper
 
     def _wrap_strategy(self, original, key):
-        inst = self
-
         def wrapper(strat, client, question, history, *, model=None):
-            if _current_inst() is None:
+            inst = _current_inst()
+            if inst is None:
                 return original(strat, client, question, history, model=model)
             with phase(f"{inst._phase(key)}.{strat.strategy_id}"):
                 return original(strat, client, question, history, model=model)
         return wrapper
 
     def _wrap_plan(self, original, key):
-        inst = self
-
         def wrapper(orch, question, strategy, context, model):
-            if _current_inst() is None:
+            inst = _current_inst()
+            if inst is None:
                 return original(orch, question, strategy, context, model)
             with phase(inst._phase(key)):
                 tasks = original(orch, question, strategy, context, model)
@@ -1132,10 +1188,9 @@ class Installed:
         return wrapper
 
     def _wrap_worker(self, original, key):
-        inst = self
-
         def wrapper(orch, question, task, context, model):
-            if _current_inst() is None:
+            inst = _current_inst()
+            if inst is None:
                 return original(orch, question, task, context, model)
             base = inst._phase(key)
             n = inst._next_worker(current_trace_id() or "")
@@ -1147,20 +1202,18 @@ class Installed:
         return wrapper
 
     def _wrap_aggregate(self, original, key):
-        inst = self
-
         def wrapper(orch, question, strategy, context, tasks, outputs, model):
-            if _current_inst() is None:
+            inst = _current_inst()
+            if inst is None:
                 return original(orch, question, strategy, context, tasks, outputs, model)
             with phase(inst._phase(key)):
                 return original(orch, question, strategy, context, tasks, outputs, model)
         return wrapper
 
     def _wrap_direct(self, original, key):
-        inst = self
-
         def wrapper(orch, question, strategy, context, model):
-            if _current_inst() is None:
+            inst = _current_inst()
+            if inst is None:
                 return original(orch, question, strategy, context, model)
             with phase(inst._phase(key)):
                 return original(orch, question, strategy, context, model)
@@ -1186,7 +1239,7 @@ class Installed:
 
 Key robustness notes:
 
-- **Closure capture**: every wrapper factory captures `inst = self` (the `Installed`) and names the business-instance positional arg distinctly (`chat`, `cls`, `rtr`, `strat`, `orch`). No `self` shadowing — the earlier drafts had this bug.
+- **Call-time install resolution**: each wrapper resolves `inst = _current_inst()` at call time (not wrapped at class-definition time) and names the business-instance positional arg distinctly (`chat`, `cls`, `rtr`, `strat`, `orch`). No `self` shadowing — the earlier drafts had this bug. Call-time resolution means a re-install/`apply()` with a new store writes to that new store (idempotent `_wrap` never re-wraps). [Amended per Task 6 review — the original closure-capture design wrote to the first install's store forever.]
 - **Transparent when inactive**: each wrapper first checks `_current_inst()`; when `None` it calls the original and returns, so class-level patching never alters behavior for code paths that didn't install observability.
 - **Idempotent**: `_wrap` skips a method already carrying `_PATCH_MARKER`, so calling `install()` twice (e.g. across tests) never double-wraps.
 - `_next_worker` uses `current_trace_id()` so worker numbering restarts per trace.
@@ -1209,7 +1262,6 @@ git commit -m "feat: automated class-level wrapping of pipeline entry points"
 
 **Files:**
 - Modify: `agent/observability/__init__.py`
-- Modify: `agent/observability/tracing.py` (add `_fmt_tokens` + `format_trace_line`)
 - Modify: `agent/agent_cli.py`
 - Test: `tests/test_observability_install.py`
 
@@ -1217,7 +1269,7 @@ git commit -m "feat: automated class-level wrapping of pipeline entry points"
 - Consumes: `TracedLLMClient`, `Installed`, `TraceStore`, `ObservabilityConfig`, `LLMClient`.
 - Produces:
   - `install(client, config, domain=None) -> tuple[client, Installed | None]` in `agent/observability/__init__.py`. When `config.observability` is None or disabled → returns `(client, None)`. Otherwise builds `TraceStore`, `TracedLLMClient`, `Installed(store, phase_map).apply()`, and returns `(traced, installed)`.
-  - `format_trace_line(trace_id, calls) -> str` in `tracing.py` — `[trace <id>] <phase> <s>/<tok> ... | total <tok> tok <s>s`. Tokens formatted with 1k suffix; latency as seconds with 1 decimal.
+  - `format_trace_line(trace_id, calls) -> str` in `tracing.py` — `[trace <id>] <phase> <s>/<tok> ... | total <tok> tok <s>s`. Tokens formatted with 1k suffix; latency as seconds with 1 decimal. **Added in Task 3** (along with `_fmt_tokens`); Task 6 only re-exports it via `__init__.py`.
   - Terminal display is **not** a separate hook — `Installed._wrap_respond` prints `format_trace_line(tid, calls)` after recording `trace_end` (implemented in Task 5).
   - `agent/agent_cli.py::main` — after building `client`, call `client, _obs = install(client, config, domain)` and use the returned client for `Chat(...)` both for `--ask` and `run_repl`.
 
@@ -1229,9 +1281,9 @@ import threading
 import pytest
 
 from agent.config import AgentConfig, ObservabilityConfig
-from agent.observability import format_trace_line, install
+from agent.observability import install
 from agent.observability import patch as patch_mod
-from agent.observability.tracing import _fmt_tokens, read_events
+from agent.observability.tracing import read_events
 
 
 @pytest.fixture(autouse=True)
@@ -1301,53 +1353,18 @@ def test_install_enabled_patches_pipeline(tmp_path):
     events, bad = read_events(tmp_path / "obs")
     assert bad == 0
     assert any(e["type"] == "trace_start" for e in events)
-
-
-def test_fmt_tokens_and_trace_line():
-    assert _fmt_tokens(None) == "?"
-    assert _fmt_tokens(500) == "500"
-    assert _fmt_tokens(1500) == "1.5k"
-    calls = [
-        {"phase": "classification", "total_tokens": 1234, "latency_ms": 330},
-        {"phase": "strategy.direct", "total_tokens": 3500, "latency_ms": 2100},
-    ]
-    line = format_trace_line("abc", calls)
-    assert line.startswith("[trace abc]")
-    assert "classification 0.3s/1.2k" in line
-    assert "strategy.direct 2.1s/3.5k" in line
-    assert line.endswith("| total 4734 tok 2.4s")
 ```
 
-Note: `install`'s `domain` argument is `None` in two of the tests — `install` must not dereference it.
+Note: `install`'s `domain` argument is `None` in two of the tests — `install` must not dereference it. (`test_fmt_tokens_and_trace_line` lives in `tests/test_tracing.py` from Task 3.)
 
 - [ ] **Step 2: Run to verify they fail**
 
 Run: `uv run pytest tests/test_observability_install.py -q`
 Expected: FAIL — `ImportError: cannot import name 'install'`
 
-- [ ] **Step 3: Add `format_trace_line` to `tracing.py`** — append to `agent/observability/tracing.py`:
+- [ ] **Step 3: No-op — `format_trace_line` + `_fmt_tokens` already exist**
 
-```python
-def _fmt_tokens(n) -> str:
-    if n is None:
-        return "?"
-    if n >= 1000:
-        return f"{n / 1000:.1f}k"
-    return str(n)
-
-
-def format_trace_line(trace_id: str, calls: list[dict]) -> str:
-    parts = []
-    for c in calls:
-        ph = c.get("phase") or "?"
-        tok = _fmt_tokens(c.get("total_tokens"))
-        latency_s = (c.get("latency_ms") or 0) / 1000
-        parts.append(f"{ph} {latency_s:.1f}s/{tok}")
-    total_tokens = sum(c.get("total_tokens") or 0 for c in calls)
-    total_s = sum(c.get("latency_ms") or 0 for c in calls) / 1000
-    return f"[trace {trace_id}] " + " | ".join(parts) + \
-        f" | total {total_tokens} tok {total_s:.1f}s"
-```
+Added to `tracing.py` in Task 3 (the ordering fix: Task 5's `patch.py` imports `format_trace_line` at module level, so it must exist before Task 5). No action here; `format_trace_line` and `_fmt_tokens` are re-exported via `agent/observability/__init__.py` in Step 4.
 
 - [ ] **Step 4: Implement `agent/observability/__init__.py`**:
 
@@ -1424,7 +1441,7 @@ git commit -m "feat: install() wiring and terminal trace display"
 ```python
 import json
 
-from agent.observability.report import build_cli_report, build_html_report, summarize_traces
+from agent.observability.report import build_cli_report, build_html_report, main, summarize_traces
 
 
 def _events():
@@ -1450,9 +1467,12 @@ def test_summarize_traces_aggregates():
     assert r["total_tokens"] == 45
     assert r["llm_calls"] == 2
     assert r["phases"] == ["classification", "strategy.direct"]
+    assert r["phase_stats"]["classification"]["tokens"] == 15
+    assert r["phase_stats"]["classification"]["latency_ms"] == 100
+    assert r["phase_stats"]["strategy.direct"]["tokens"] == 30
 
 
-def test_cli_report_contains_key_numbers(capsys):
+def test_cli_report_contains_key_numbers():
     text = build_cli_report(_events())
     assert "a" in text
     assert "45" in text
@@ -1464,6 +1484,19 @@ def test_html_report_self_contained():
     assert "<html" in html
     assert "classification" in html
     assert "<svg" in html
+    assert "Model distribution" in html
+    assert "Phase latency" in html
+    assert "<td>100</td>" in html
+
+
+def test_main_strips_report_token(tmp_path, capsys):
+    day_file = tmp_path / "trace-2026-08-11.jsonl"
+    day_file.write_text("\n".join(json.dumps(e) for e in _events()) + "\n", encoding="utf-8")
+    code = main(["report", "--data-dir", str(tmp_path), "--day", "2026-08-11"])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "ExpertForge observability report" in out
+    assert "a" in out
 ```
 
 - [ ] **Step 2: Run to verify they fail**
@@ -1498,7 +1531,7 @@ def summarize_traces(events: list[dict]) -> list[dict]:
                 "trace_id": tid, "question": "", "total_tokens": 0,
                 "prompt_tokens": 0, "completion_tokens": 0, "llm_calls": 0,
                 "total_latency_ms": 0.0, "reject": False, "phases": [],
-                "phase_set": [],
+                "phase_set": [], "phase_stats": {},
             }
             order.append(tid)
         r = rows[tid]
@@ -1515,6 +1548,9 @@ def summarize_traces(events: list[dict]) -> list[dict]:
             ph = e.get("phase") or "?"
             if ph not in r["phase_set"]:
                 r["phase_set"].append(ph)
+            st = r["phase_stats"].setdefault(ph, {"tokens": 0, "latency_ms": 0.0})
+            st["tokens"] += e.get("total_tokens") or 0
+            st["latency_ms"] += e.get("latency_ms") or 0
     result = []
     for tid in order:
         r = rows[tid]
@@ -1552,46 +1588,57 @@ def build_cli_report(events: list[dict]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _svg_bar(rows: list[dict], width: int = 800) -> str:
-    if not rows:
-        return "<svg width=\"800\" height=\"40\"></svg>"
-    max_tok = max(r["total_tokens"] for r in rows) or 1
+def _svg_hbar(items: list[tuple[str, float]], *, unit: str, width: int = 800) -> str:
+    if not items:
+        return '<svg width="800" height="40"></svg>'
+    mx = max(v for _, v in items) or 1
     bars = []
-    for i, r in enumerate(rows):
-        w = max(2, int(r["total_tokens"] / max_tok * (width - 20)))
+    for i, (label, value) in enumerate(items):
+        w = max(2, int(value / mx * (width - 20)))
         bars.append(
             f'<rect x="{10}" y="{i * 8 + 2}" width="{w}" height="6" '
-            f'fill="#4a90d9"><title>{html.escape(r["trace_id"])} '
-            f'{r["total_tokens"]} tokens</title></rect>'
+            f'fill="#4a90d9"><title>{html.escape(label)} '
+            f'{value:g} {unit}</title></rect>'
         )
-    return f'<svg width="{width}" height="{len(rows) * 8 + 8}">' + "".join(bars) + "</svg>"
+    return f'<svg width="{width}" height="{len(items) * 8 + 8}">' + "".join(bars) + "</svg>"
 
 
 def build_html_report(events: list[dict]) -> str:
     rows = summarize_traces(events)
+    model_items = [(m or "?", c) for m, c in
+                   Counter(e.get("model") for e in events if e.get("type") == "llm_call").items()]
+    phase_lat_items = [(p or "?", lat) for p, lat in
+                       Counter(e.get("phase") for e in events if e.get("type") == "llm_call").items()]
     details = []
     for r in rows:
         phase_rows = "\n".join(
-            f"<tr><td>{html.escape(p)}</td></tr>"
+            f"<tr><td>{html.escape(p)}</td><td>{r['phase_stats'].get(p, {}).get('tokens', 0)}</td>"
+            f"<td>{r['phase_stats'].get(p, {}).get('latency_ms', 0):.0f}</td></tr>"
             for p in r["phases"]
         )
         details.append(
             f"<details><summary>{html.escape(r['trace_id'])} — "
             f"{html.escape(r['question'])} — {r['total_tokens']} tok</summary>"
-            f"<table><tr><th>phase</th></tr>{phase_rows}</table></details>"
+            f"<table><tr><th>phase</th><th>tokens</th><th>latency(ms)</th></tr>"
+            f"{phase_rows}</table></details>"
         )
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>ExpertForge observability</title>
-<style>body{{font-family:system-ui,sans-serif;margin:2rem}}details{{margin:.5rem 0}}</style>
+<style>body{{font-family:system-ui,sans-serif;margin:2rem}}details{{margin:.5rem 0}}table{{border-collapse:collapse}}td,th{{border:1px solid #ddd;padding:2px 8px;text-align:left}}</style>
 </head><body>
 <h1>ExpertForge observability report</h1>
-<h2>Token trend by trace</h2>{_svg_bar(rows)}
+<h2>Token trend by trace</h2>{_svg_hbar([(r["trace_id"], r["total_tokens"]) for r in rows], unit="tokens")}
+<h2>Model distribution</h2>{_svg_hbar(model_items, unit="calls")}
+<h2>Phase latency (ms)</h2>{_svg_hbar(phase_lat_items, unit="ms")}
 <h2>Traces</h2>{''.join(details)}
 </body></html>
 """
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "report":
+        argv = argv[1:]
     parser = argparse.ArgumentParser(prog="agent.observability.report",
                                      description="Generate observability reports")
     parser.add_argument("--data-dir", default=".observability", help="trace JSONL directory")
@@ -1610,7 +1657,7 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 ```
 
-The behavior contract is fixed by `tests/test_report.py`: `summarize_traces` returns rows with `total_tokens`, `llm_calls`, `phases`, `question`; `build_cli_report` prints the trace id and token totals; `build_html_report` emits `<html>`, phase text, and `<svg>`.
+The behavior contract is fixed by `tests/test_report.py`: `summarize_traces` returns rows with `total_tokens`, `llm_calls`, `phases`, `phase_stats` (per-phase `tokens`/`latency_ms`), `question`; `build_cli_report` prints the trace id and token totals; `build_html_report` emits `<html>`, phase text, `<svg>`, a "Model distribution" section, a "Phase latency" section, and per-phase token/latency detail; `main(["report", "--data-dir", ...])` strips the leading `report` token and returns 0.
 
 Also create `agent/observability/__main__.py`:
 
@@ -1623,6 +1670,8 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
+`main()` tolerates a leading `report` token (it strips it), so both `python -m agent.observability report ...` and `python -m agent.observability ...` work.
+
 - [ ] **Step 4: Run to verify they pass**
 
 Run: `uv run pytest tests/test_report.py -q`
@@ -1630,8 +1679,8 @@ Expected: PASS
 
 - [ ] **Step 5: Smoke-test the entry point**
 
-Run: `uv run python -m agent.observability report --data-dir tests/fixtures 2>/dev/null || true`
-Expected: no crash (empty report or fixture output). Full CLI sanity: `uv run python -m agent.observability report --help` prints usage.
+Run: `uv run python -m agent.observability report --data-dir . 2>&1 | tail -3`
+Expected: prints the CLI report header and a row count line (no crash). Full CLI sanity: `uv run python -m agent.observability report --help` prints usage, exit 0.
 
 - [ ] **Step 6: Commit**
 
@@ -1717,6 +1766,6 @@ git commit -m "docs: document observability plugin usage"
 
 - **Spec coverage:** §2 architecture → Tasks 3–6; §2.1 config → Task 2; §3 data model → Tasks 3–4; §3.3 phases → Task 5; §4.1/4.2 → Tasks 1, 4; §4.3 patch table → Task 5; §4.4 robustness (degrade/warn) → Tasks 3, 5, 6; §5 terminal display → Task 6; §6.1/6.2 reports → Task 7; §7 error handling → Tasks 3, 4, 5, 7; §8 tests → all tasks; §9 success criteria → verified in Task 8.
 - **Placeholders:** none — every step has concrete code.
-- **Type consistency:** `TraceStore.write(event: dict)`, `trace_span() -> Iterator[str]`, `phase(name)`, `current_trace_id()`/`current_phase()`, `TracedLLMClient(inner, store)`, `Installed(store, phase_map).apply()`, `install(client, config, domain=None) -> (client, plugin)`, `format_trace_line` (in `tracing.py`), `read_events(data_dir, day=None) -> (events, bad)`, `_fmt_tokens` (in `tracing.py`) are used consistently across tasks 3–7. Worker phases `f"orchestration.worker.{n}"` match §3.3. Config field name `observability` on `AgentConfig` matches §2.1. Wrappers capture `inst = self` to avoid `self` shadowing (Task 5).
+- **Type consistency:** `TraceStore.write(event: dict)`, `trace_span() -> Iterator[str]`, `phase(name)`, `current_trace_id()`/`current_phase()`, `TracedLLMClient(inner, store)`, `Installed(store, phase_map).apply()`, `install(client, config, domain=None) -> (client, plugin)`, `format_trace_line` (in `tracing.py`), `read_events(data_dir, day=None) -> (events, bad)`, `_fmt_tokens` (in `tracing.py`) are used consistently across tasks 3–7. Worker phases `f"orchestration.worker.{n}"` match §3.3. Config field name `observability` on `AgentConfig` matches §2.1. Wrappers resolve `inst = _current_inst()` at call time to avoid `self` shadowing and store-binding bugs (Task 5).
 - **Test isolation:** `tests/test_observability_patch.py` and `tests/test_observability_install.py` each install an autouse `_reset_observability` fixture that sets `patch_mod._ACTIVE = None` after every test, so the class-level wrappers stay transparent (passthrough) for every other test module in the same pytest process.
 - **Known deviation:** terminal line appears immediately after `Chat.respond` returns, i.e. just *before* the REPL prints `expert > ...`. Cosmetic only; spec §5 example order is not contractually binding.

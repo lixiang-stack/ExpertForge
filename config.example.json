@@ -3,5 +3,10 @@
   "model": "deepseek-v4-flash",
   "model_low": "",
   "model_high": "",
-  "domain_dir": "domain/software_engineering"
+  "domain_dir": "domain/software_engineering",
+  "observability": {
+    "enabled": false,
+    "data_dir": ".observability",
+    "phase_map": {}
+  }
 }
