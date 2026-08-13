@@ -1,8 +1,37 @@
+"""Read model for the observability event stream.
+
+`events` is the flat event stream written by the observability layer; this
+module is a read-only "read model" that reorganizes raw events into three
+render-ready views:
+
+1. summary stats  - one TraceSummary per trace, plus model/global aggregates
+2. timeline       - chronological Step list per trace
+3. grouped stages - flat timeline re-grouped into ordered Stage blocks
+
+All functions are pure/read-only and never raise.
+
+This is the READ side of the "write-side minimal, read-side derives"
+philosophy: tracing.py only tags each event with "where am I now"
+(trace_id + innermost phase), and any hierarchy is rebuilt here. The
+one-to-many "a phase contains many sub-events" is expressed by events that
+share the same phase string in the stream. Example (view 3):
+
+    flat stream:
+      {"type":"llm_call","phase":"orchestration.planner","ts":10}
+      {"type":"llm_call","phase":"orchestration.worker.1","ts":20}
+      {"type":"llm_call","phase":"orchestration.worker.1","ts":30}
+      {"type":"llm_call","phase":"orchestration.worker.2","ts":40}
+    reconstructs into:
+      Stage("orchestration.worker")
+        workers: [WorkerGroup(1, steps=[ts20, ts30]), WorkerGroup(2, steps=[ts40])]
+"""
+
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 
 
+# ============================ View 1: summary stats ============================
 @dataclass
 class TraceSummary:
     trace_id: str = ""
@@ -91,8 +120,10 @@ def model_stats(events: list[dict]) -> list[ModelStat]:
         st.out_tokens += e.get("completion_tokens") or 0
         st.total_latency_ms += e.get("latency_ms") or 0
     return sorted(acc.values(), key=lambda s: s.in_tokens + s.out_tokens, reverse=True)
+# ============================ /View 1: summary stats ============================
 
 
+# ============================ View 2: timeline ============================
 @dataclass
 class Step:
     ts: int = 0
@@ -149,8 +180,10 @@ def build_timeline(events: list[dict]) -> dict[str, list[Step]]:
     for steps in by_tid.values():
         steps.sort(key=lambda s: s.ts)
     return {tid: steps for tid, steps in by_tid.items() if steps}
+# ============================ /View 2: timeline ============================
 
 
+# ============================ View 3: grouped stages ============================
 @dataclass
 class WorkerGroup:
     number: int = 0
@@ -222,3 +255,4 @@ def group_stages(timeline: dict[str, list[Step]]) -> dict[str, list[Stage]]:
                 stage.steps.append(s)
         result[tid] = [by_title[t] for t in order]
     return result
+# ============================ /View 3: grouped stages ============================

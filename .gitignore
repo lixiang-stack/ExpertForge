@@ -4,3 +4,5 @@ __pycache__/
 .worktrees/
 config.json
 .env
+.DS_Store
+.observability/

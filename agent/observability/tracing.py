@@ -1,3 +1,14 @@
+"""Context-local tracing for observability.
+
+Design philosophy: observability must never break business code (every write
+path degrades to a warning), and the WRITE side stays minimal -- it only tags
+each event with "where am I right now" (trace_id + innermost phase). Any
+tree/hierarchy (e.g. one orchestration stage containing many worker steps) is
+NOT stored here; it is reconstructed from the flat event stream by the read
+model in agent.observability.report_data ("write-side minimal, read-side
+derives").
+"""
+
 from __future__ import annotations
 
 import contextvars
@@ -24,6 +35,12 @@ class TraceStore:
         self._lock = threading.Lock()
         self._day: str | None = None
         self._file = None
+        # Hot in-memory cache of recent llm_call events (capped at
+        # _MAX_MEMORY_TRACES) for live lookups via trace_llm_calls(); the full
+        # history lives in the daily JSONL file. `_memory_order` is an FIFO
+        # queue of trace_ids mirroring `_in_memory` insertion order: when the
+        # cap is exceeded, pop(0) evicts the OLDEST trace, so the cache keeps
+        # the most recent 100 traces' llm calls.
         self._in_memory: dict[str, list[dict]] = {}
         self._memory_order: list[str] = []
         self._MAX_MEMORY_TRACES = 100
@@ -107,6 +124,24 @@ def read_events(data_dir: str | Path, *, day: str | None = None) -> tuple[list[d
 
 @dataclass
 class _Span:
+    """Live per-trace state of the current execution context.
+
+    `phases` is a STACK of the current nesting path, NOT a collection of all
+    phases of a trace. Siblings never coexist in it; each `with phase(...)`
+    block pushes on enter and pops on exit, so the stack only ever holds the
+    chain from the outermost phase down to the innermost one.
+
+    Example while a planner runs worker #3:
+        phases == ["orchestration.planner", "orchestration.worker.3"]
+        current_phase() returns phases[-1] -> "orchestration.worker.3"
+    When worker #3 exits, pop() restores the outer "orchestration.planner".
+
+    The one-to-many structure ("a phase contains many sub-events") is NOT
+    stored here: events written inside the same phase share the same phase
+    string in the flat event stream, and the read model (report_data.py)
+    re-groups them into Stage / WorkerGroup trees afterwards.
+    """
+
     trace_id: str
     phases: list[str] = field(default_factory=list)
 

@@ -5,7 +5,7 @@
   "model_high": "",
   "domain_dir": "domain/software_engineering",
   "observability": {
-    "enabled": false,
+    "enabled": true,
     "data_dir": ".observability",
     "phase_map": {}
   }

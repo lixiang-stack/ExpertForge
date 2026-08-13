@@ -1,3 +1,25 @@
+"""Non-invasive observability injection (AOP-style monkey-patching).
+
+What it does: `apply()` wraps eight business methods in place
+(Chat.respond, ClassificationService.classify, ...) with tracing wrappers
+that record trace_start / decision / trace_end events and open the
+trace_span / phase contexts -- WITHOUT touching any business code.
+
+Why it exists: hand-writing tracing into every business method would couple
+business to observability and make it impossible to turn off. With patching,
+observability is opt-in (a single apply() call) and business code stays clean.
+
+Design philosophy:
+- Observability must never break business: every recording step degrades to
+  a warning, and every wrapper is a transparent passthrough when no install
+  is active (`_ACTIVE` is None).
+- Wrappers resolve the active install at CALL time, not wrap time, so
+  re-installing (a new apply() with a new store) writes to that store.
+- apply() is idempotent via the `__observability_patched__` marker.
+- The only real business logic in each wrapper is the `original(...)`
+  invocation; everything else is observability scaffolding.
+"""
+
 from __future__ import annotations
 
 import functools
@@ -100,7 +122,7 @@ class Installed:
         def wrapper(chat, question):
             inst = _current_inst()
             if inst is None:
-                return original(chat, question)
+                return original(chat, question)  # passthrough: real business call
             with trace_span() as tid:
                 ph = inst._phase(key)
                 try:
@@ -109,7 +131,7 @@ class Installed:
                                       "domain": getattr(chat.domain, "name", None)})
                 except Exception as e:  # noqa: BLE001 - degrade, never break business
                     warnings.warn(f"observability: failed to record trace_start: {e}")
-                response = original(chat, question)
+                response = original(chat, question)  # <-- real business call
                 calls = inst.store.trace_llm_calls(tid)
                 total_tokens = sum(c.get("total_tokens") or 0 for c in calls)
                 total_lat = sum(c.get("latency_ms") or 0 for c in calls)
@@ -133,9 +155,9 @@ class Installed:
         def wrapper(cls, question, *, model=None):
             inst = _current_inst()
             if inst is None:
-                return original(cls, question, model=model)
+                return original(cls, question, model=model)  # passthrough: real business call
             with phase(inst._phase(key)):
-                result = original(cls, question, model=model)
+                result = original(cls, question, model=model)  # <-- real business call
                 tid = current_trace_id()
                 if tid:
                     inst._record_decision(tid, inst._phase(key), {
@@ -148,9 +170,9 @@ class Installed:
         def wrapper(rtr, question):
             inst = _current_inst()
             if inst is None:
-                return original(rtr, question)
+                return original(rtr, question)  # passthrough: real business call
             with phase(inst._phase(key)):
-                result = original(rtr, question)
+                result = original(rtr, question)  # <-- real business call
                 tid = current_trace_id()
                 if tid:
                     inst._record_decision(tid, inst._phase(key), {
@@ -164,18 +186,18 @@ class Installed:
         def wrapper(strat, client, question, history, *, model=None):
             inst = _current_inst()
             if inst is None:
-                return original(strat, client, question, history, model=model)
+                return original(strat, client, question, history, model=model)  # passthrough: real business call
             with phase(f"{inst._phase(key)}.{strat.strategy_id}"):
-                return original(strat, client, question, history, model=model)
+                return original(strat, client, question, history, model=model)  # <-- real business call
         return wrapper
 
     def _wrap_plan(self, original, key):
         def wrapper(orch, question, strategy, context, model):
             inst = _current_inst()
             if inst is None:
-                return original(orch, question, strategy, context, model)
+                return original(orch, question, strategy, context, model)  # passthrough: real business call
             with phase(inst._phase(key)):
-                tasks = original(orch, question, strategy, context, model)
+                tasks = original(orch, question, strategy, context, model)  # <-- real business call
                 tid = current_trace_id()
                 if tid:
                     data = {"degraded": True} if tasks is None else {
@@ -195,25 +217,25 @@ class Installed:
                 tid = current_trace_id()
                 if tid:
                     inst._record_decision(tid, f"{base}.{n}", {"task": task[0]})
-                return original(orch, question, task, context, model)
+                return original(orch, question, task, context, model)  # <-- real business call
         return wrapper
 
     def _wrap_aggregate(self, original, key):
         def wrapper(orch, question, strategy, context, tasks, outputs, model):
             inst = _current_inst()
             if inst is None:
-                return original(orch, question, strategy, context, tasks, outputs, model)
+                return original(orch, question, strategy, context, tasks, outputs, model)  # passthrough: real business call
             with phase(inst._phase(key)):
-                return original(orch, question, strategy, context, tasks, outputs, model)
+                return original(orch, question, strategy, context, tasks, outputs, model)  # <-- real business call
         return wrapper
 
     def _wrap_direct(self, original, key):
         def wrapper(orch, question, strategy, context, model):
             inst = _current_inst()
             if inst is None:
-                return original(orch, question, strategy, context, model)
+                return original(orch, question, strategy, context, model)  # passthrough: real business call
             with phase(inst._phase(key)):
-                return original(orch, question, strategy, context, model)
+                return original(orch, question, strategy, context, model)  # <-- real business call
         return wrapper
 
     def apply(self) -> "Installed":
