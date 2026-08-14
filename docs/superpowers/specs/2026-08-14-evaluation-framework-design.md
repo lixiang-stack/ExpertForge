@@ -146,10 +146,9 @@ The evaluator-owned client wrapper records token/latency for every LLM call (cla
 
 ## 6. Config
 
-Extend `AgentConfig`:
+Extend `AgentConfig` with an optional `evaluation` block:
 
-- `judge_model: str | None` — model used by the LLM-as-judge. Falls back to `model` if omitted.
-- Optional `evaluation: { results_dir: "evaluation/results" }` block in config.json.
+- `evaluation: { judge_model: str | None, results_dir: "evaluation/results" }` — evaluation-only settings. `judge_model` is the model used by the LLM-as-judge (falls back to `model` if omitted); it is consumed only by the evaluation subsystem, so it lives inside `evaluation` rather than at the top level.
 
 `python -m agent.evaluation` loads the same `config.json` (path overridable via `--config`). Model, domain_dir, model tiers all come from the existing agent config — evaluation measures the *real* agent configuration.
 

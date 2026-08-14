@@ -15,7 +15,7 @@
 - Evaluation never reads `TraceStore` / observability events; it is fully decoupled from observability.
 - `Chat.respond(question, *, route: RouteResult | None = None) -> ChatResponse` — when `route` is given, skip `Router.route`; default behavior unchanged.
 - `LLMClient.chat_completion` stores `_usage_local.cache_tokens` (0 when provider does not report it) alongside the existing `_usage_local.usage`.
-- `AgentConfig` gains `judge_model: str | None = None` and `evaluation: EvaluationConfig | None = None` (`EvaluationConfig(results_dir="evaluation/results")`).
+- `AgentConfig` gains `evaluation: EvaluationConfig | None = None` (`EvaluationConfig(judge_model: str | None = None, results_dir: str = "evaluation/results")`). `judge_model` is evaluation-only, so it lives inside the `evaluation` block.
 - The initial dataset `evaluation/datasets/software_engineering.yaml` uses the real intent ids and strategy ids from `domain/software_engineering/` (`intents.yaml`, `strategies.yaml`, `intent_mapping.yaml`).
 - Per-run result files go to `{results_dir}/{YYYY-MM-DD}-{label}.json`.
 - Out-of-domain cases use `expected.domain: "other"`, `expected.intent: null`, `expected.complexity: null`, `expected.strategy: reject`, `expected.orchestrate: false`.
@@ -106,7 +106,7 @@ git commit -m "feat: record cache tokens in LLMClient usage"
 
 ---
 
-### Task 2: Config — `judge_model` and `evaluation` block
+### Task 2: Config — `evaluation` block with `judge_model`
 
 **Files:**
 - Modify: `agent/config.py`
@@ -116,26 +116,24 @@ git commit -m "feat: record cache tokens in LLMClient usage"
 **Interfaces:**
 - Consumes: none.
 - Produces:
-  - `EvaluationConfig` dataclass: `results_dir: str = "evaluation/results"`.
-  - `AgentConfig.judge_model: str | None = None`.
+  - `EvaluationConfig` dataclass: `judge_model: str | None = None`, `results_dir: str = "evaluation/results"`.
   - `AgentConfig.evaluation: EvaluationConfig | None = None`.
-  - `load_config` populates both from JSON keys `judge_model` (string or absent) and `evaluation` (object `{"results_dir": "..."}`, absent or non-dict → None).
+  - `load_config` populates it from JSON key `evaluation` (object `{"judge_model": "...", "results_dir": "..."}`, absent or non-dict → None). `judge_model` is evaluation-only (used by the judge), so it lives inside the `evaluation` block, not at the top level.
 
 - [ ] **Step 1: Write the failing tests** — append to `tests/test_config.py`:
 
 ```python
-def test_load_config_judge_model_and_evaluation(tmp_path, monkeypatch):
+def test_load_config_evaluation_judge_model_and_results_dir(tmp_path, monkeypatch):
     monkeypatch.delenv("AGENT_BASE_URL", raising=False)
     path = _write_config(tmp_path, {
         "base_url": "https://api.example.com/v1",
         "model": "model-a",
         "domain_dir": "domain/software_engineering",
-        "judge_model": "judge-a",
-        "evaluation": {"results_dir": "eval/results"},
+        "evaluation": {"judge_model": "judge-a", "results_dir": "eval/results"},
     })
     cfg = load_config(path)
-    assert cfg.judge_model == "judge-a"
     assert cfg.evaluation is not None
+    assert cfg.evaluation.judge_model == "judge-a"
     assert cfg.evaluation.results_dir == "eval/results"
 
 
@@ -147,7 +145,6 @@ def test_load_config_evaluation_defaults(tmp_path, monkeypatch):
         "domain_dir": "domain/software_engineering",
     })
     cfg = load_config(path)
-    assert cfg.judge_model is None
     assert cfg.evaluation is None
 
 
@@ -165,8 +162,8 @@ def test_load_config_evaluation_ignores_non_dict(tmp_path, monkeypatch):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run pytest tests/test_config.py -k "judge or evaluation" -v`
-Expected: `FAIL` — `AttributeError: 'AgentConfig' object has no attribute 'judge_model'`.
+Run: `uv run pytest tests/test_config.py -k "evaluation" -v`
+Expected: `FAIL` — `AttributeError: 'AgentConfig' object has no attribute 'evaluation'`.
 
 - [ ] **Step 3: Implement** — in `agent/config.py`:
 
@@ -175,35 +172,34 @@ Add the dataclass next to `ObservabilityConfig` (after line 23):
 ```python
 @dataclass
 class EvaluationConfig:
+    judge_model: str | None = None
     results_dir: str = "evaluation/results"
 ```
 
-Add the two fields to `AgentConfig` (after `observability`):
+Add the field to `AgentConfig` (after `observability`):
 
 ```python
-    judge_model: str | None = None
     evaluation: EvaluationConfig | None = None
 ```
 
 In `load_config`, after the observability block, add:
 
 ```python
-    judge_model = raw.get("judge_model")
-    judge_model = judge_model if isinstance(judge_model, str) and judge_model else None
-
     raw_eval = raw.get("evaluation")
     evaluation = None
     if isinstance(raw_eval, dict):
+        judge_model = raw_eval.get("judge_model")
+        judge_model = judge_model if isinstance(judge_model, str) and judge_model else None
         results_dir = raw_eval.get("results_dir") or "evaluation/results"
         evaluation = EvaluationConfig(
-            results_dir=results_dir if isinstance(results_dir, str) else "evaluation/results"
+            judge_model=judge_model,
+            results_dir=results_dir if isinstance(results_dir, str) else "evaluation/results",
         )
 ```
 
-And pass both into the `AgentConfig(...)` constructor:
+And pass it into the `AgentConfig(...)` constructor:
 
 ```python
-        judge_model=judge_model,
         evaluation=evaluation,
 ```
 
@@ -220,9 +216,9 @@ Expected: PASS (all existing + 3 new).
   "model": "deepseek-v4-flash",
   "model_low": "",
   "model_high": "",
-  "judge_model": "deepseek-v4-flash",
   "domain_dir": "domain/software_engineering",
   "evaluation": {
+    "judge_model": "deepseek-v4-flash",
     "results_dir": "evaluation/results"
   },
   "observability": {
@@ -245,7 +241,7 @@ Expected: stdout/stderr contains `Config error: AGENT_API_KEY environment variab
 
 ```bash
 git add agent/config.py tests/test_config.py config.example.json
-git commit -m "feat: add judge_model and evaluation config"
+git commit -m "feat: add evaluation config with judge_model"
 ```
 
 ---
@@ -881,9 +877,9 @@ git commit -m "feat: LLM-as-judge scoring with fallback"
   - `run_evaluation(config: AgentConfig, domain: DomainConfig, dataset: Dataset, client: LLMClient, *, skip_quality: bool = False) -> list[CaseResult]`.
 
 `run_evaluation` per case (sequential):
-1. `router = Router(client, config, domain)`, `chat = Chat(client, config, domain)`, `judge = Judge(client, config.judge_model or config.model)` built once.
-2. `recorder = RecordingClient(client)` — wrap; the SAME `client` instance is shared between router/chat/judge.
-3. For each case: `recorder.reset()`; `route = router.route(case.question)`; `expected_model = resolve_model(config, domain, route, config.model)`; if `case.answer_quality and not skip_quality`: `resp = chat.respond(case.question, route=route)`; `answer = resp.text`; else `answer = None`. If judged, `scorecard = judge.score(case.question, answer, reference=case.reference)`; else `None`. `actual_model` = the model of the last recorded call (or `None` if no calls). Aggregate recorded calls into the cost fields.
+1. `recorder = RecordingClient(client)` — wrap; the SAME `client` instance is shared, but router/chat/judge receive the `recorder` so every LLM call is captured.
+2. `router = Router(recorder, config, domain)`, `judge = Judge(recorder, config.evaluation.judge_model if config.evaluation else config.model)` built once.
+3. For each case: `recorder.reset()`; `chat = Chat(recorder, config, domain)` (fresh per case so history never leaks across cases); `route = router.route(case.question)`; `expected_model = resolve_model(config, domain, route, config.model)`; if `case.answer_quality and not skip_quality`: `resp = chat.respond(case.question, route=route)`; `answer = resp.text`; else `answer = None`. If judged, `scorecard = judge.score(case.question, answer, reference=case.reference)`; else `None`. `actual_model` = the model of the last recorded call (or `None` if no calls). Aggregate recorded calls into the cost fields.
 
 - [ ] **Step 1: Write the failing tests** — create `tests/test_evaluation_runner.py`:
 
@@ -891,7 +887,7 @@ git commit -m "feat: LLM-as-judge scoring with fallback"
 import json
 
 from agent.chat import Chat
-from agent.config import AgentConfig, DomainConfig, IntentDef, StrategyDef
+from agent.config import AgentConfig, DomainConfig, EvaluationConfig, IntentDef, StrategyDef
 from agent.evaluation.dataset import Dataset, EvalCase, load_dataset
 from agent.evaluation.runner import RecordingClient, run_evaluation
 from agent.llm import LLMClient
@@ -930,7 +926,7 @@ def _domain():
 def _config():
     return AgentConfig(base_url="https://x", model="m", classifier_model="cm",
                        domain_dir="d", model_low="low-a", model_high="high-a",
-                       judge_model="judge-a")
+                       evaluation=EvaluationConfig(judge_model="judge-a"))
 
 
 class FakeClient:
@@ -1151,7 +1147,8 @@ def run_evaluation(
 ) -> list[CaseResult]:
     recorder = RecordingClient(client)
     router = Router(recorder, config, domain)
-    judge = Judge(recorder, config.judge_model or config.model)
+    judge = Judge(recorder,
+                  config.evaluation.judge_model if config.evaluation else config.model)
     results: list[CaseResult] = []
     for case in dataset.cases:
         recorder.reset()
@@ -2152,7 +2149,7 @@ def _cmd_run(args) -> int:
     client = LLMClient(base_url=config.base_url, api_key=api_key, model=config.model)
     results = run_evaluation(config, domain, dataset, client, skip_quality=args.skip_quality)
     metrics = compute_metrics(dataset, results)
-    judge_model = getattr(config, "judge_model", None)
+    judge_model = (config.evaluation.judge_model if config.evaluation else None) or config.model
     record = serialize_results(
         results, metrics,
         domain=dataset.domain, label=args.label, model=config.model,
@@ -2608,7 +2605,7 @@ uv run python -m agent.evaluation diff evaluation/results/2026-08-14-a.json \
                                    evaluation/results/2026-08-14-b.json
 ```
 
-Answer-quality judging uses `judge_model` from `config.json` (falls back to `model`).
+Answer-quality judging uses `evaluation.judge_model` from `config.json` (falls back to `model`).
 Evaluation is independent of observability: it reads pipeline return values and its
 own usage recorder, so disabling observability does not affect evaluation.
 ```
@@ -2686,4 +2683,4 @@ git commit -m "docs: evaluation usage; test: live evaluation smoke"
 
 - [ ] **Step 2: Run the full suite one final time** and report the pass count (expected 112).
 
-- [ ] **Step 3: Verify the example config and README consistency** — `config.example.json` includes `judge_model` and `evaluation`; README documents `run`/`diff` and the independence from observability.
+- [ ] **Step 3: Verify the example config and README consistency** — `config.example.json` includes the `evaluation` block with `judge_model` and `results_dir`; README documents `run`/`diff` and the independence from observability.
