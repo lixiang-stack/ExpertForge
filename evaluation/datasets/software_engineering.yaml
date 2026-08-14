@@ -1,0 +1,266 @@
+domain: software_engineering
+cases:
+  # ---- Knowledge: FAQ ----
+  - id: se-001
+    question: "What does HTTP status code 503 mean?"
+    category: knowledge
+    expected: {domain: software_engineering, intent: faq, complexity: simple, strategy: direct, orchestrate: false}
+    answer_quality: true
+  - id: se-002
+    question: "What is the default port for MySQL?"
+    category: knowledge
+    expected: {domain: software_engineering, intent: faq, complexity: simple, strategy: direct, orchestrate: false}
+    answer_quality: true
+  - id: se-003
+    question: "What is the time complexity of quicksort in the average case?"
+    category: knowledge
+    expected: {domain: software_engineering, intent: faq, complexity: simple, strategy: direct, orchestrate: false}
+    answer_quality: true
+  - id: se-004
+    question: "What is a database index?"
+    category: knowledge
+    expected: {domain: software_engineering, intent: faq, complexity: simple, strategy: direct, orchestrate: false}
+    answer_quality: true
+  - id: se-005
+    question: "How do you create a git branch?"
+    category: knowledge
+    expected: {domain: software_engineering, intent: faq, complexity: simple, strategy: direct, orchestrate: false}
+    answer_quality: true
+  - id: se-006
+    question: "What does the SOLID acronym stand for?"
+    category: knowledge
+    expected: {domain: software_engineering, intent: faq, complexity: simple, strategy: direct, orchestrate: false}
+    answer_quality: true
+
+  # ---- Knowledge: Concept Explanation ----
+  - id: se-010
+    question: "What is dependency injection?"
+    category: knowledge
+    expected: {domain: software_engineering, intent: concept_explain, complexity: simple, strategy: teaching, orchestrate: false}
+    answer_quality: true
+    reference: "Dependency injection is a technique where a component receives its dependencies from outside rather than constructing them itself, improving testability and decoupling."
+  - id: se-011
+    question: "Explain how a virtual memory page table works together with the TLB."
+    category: knowledge
+    expected: {domain: software_engineering, intent: concept_explain, complexity: medium, strategy: teaching, orchestrate: false}
+    answer_quality: true
+  - id: se-012
+    question: "Why is immutability important in functional programming?"
+    category: knowledge
+    expected: {domain: software_engineering, intent: concept_explain, complexity: simple, strategy: teaching, orchestrate: false}
+    answer_quality: true
+  - id: se-013
+    question: "Explain the difference between concurrency and parallelism."
+    category: knowledge
+    expected: {domain: software_engineering, intent: concept_explain, complexity: simple, strategy: teaching, orchestrate: false}
+    answer_quality: true
+  - id: se-014
+    question: "Explain how a relational database query planner works and why an index changes the plan."
+    category: knowledge
+    expected: {domain: software_engineering, intent: concept_explain, complexity: medium, strategy: teaching, orchestrate: false}
+    answer_quality: true
+
+  # ---- Knowledge: Tutorial ----
+  - id: se-020
+    question: "Teach me step by step how to build a REST API with FastAPI and connect it to PostgreSQL."
+    category: knowledge
+    expected: {domain: software_engineering, intent: tutorial, complexity: medium, strategy: teaching, orchestrate: false}
+    answer_quality: true
+  - id: se-021
+    question: "Give me a step-by-step tutorial on setting up Docker Compose for a Node.js app with a Redis service."
+    category: knowledge
+    expected: {domain: software_engineering, intent: tutorial, complexity: medium, strategy: teaching, orchestrate: false}
+    answer_quality: true
+
+  # ---- Knowledge: Learning Guide ----
+  - id: se-030
+    question: "Create a structured learning path to go from Python basics to backend web development."
+    category: knowledge
+    expected: {domain: software_engineering, intent: learning_guide, complexity: medium, strategy: teaching, orchestrate: false}
+    answer_quality: true
+  - id: se-031
+    question: "Design a multi-month study plan for becoming a reliable systems engineer."
+    category: knowledge
+    expected: {domain: software_engineering, intent: learning_guide, complexity: complex, strategy: teaching, orchestrate: true}
+    answer_quality: true
+
+  # ---- Knowledge: Summarization ----
+  - id: se-040
+    question: "Summarize the key ideas of this article into three bullet points: <article>Effective debugging requires reproducing the failure deterministically, isolating the smallest failing input, and forming hypotheses that you can test rather than guessing at fixes.</article>"
+    category: knowledge
+    expected: {domain: software_engineering, intent: summarization, complexity: simple, strategy: direct, orchestrate: false}
+    answer_quality: false
+
+  # ---- Problem Solving: Troubleshooting ----
+  - id: se-050
+    question: "My database connection pool is exhausted under load and new requests hang. How do I diagnose it?"
+    category: problem_solving
+    expected: {domain: software_engineering, intent: troubleshooting, complexity: medium, strategy: debugging, orchestrate: false}
+    answer_quality: true
+  - id: se-051
+    question: "Why does my C++ program crash with a segmentation fault when accessing index 0 of an empty vector?"
+    category: problem_solving
+    expected: {domain: software_engineering, intent: troubleshooting, complexity: simple, strategy: debugging, orchestrate: false}
+    answer_quality: true
+  - id: se-052
+    question: "A distributed system fails intermittently with timeout errors across several services. Investigate the root cause and propose a fix."
+    category: problem_solving
+    expected: {domain: software_engineering, intent: troubleshooting, complexity: complex, strategy: debugging, orchestrate: true}
+    answer_quality: true
+  - id: se-053
+    question: "My Node.js app crashes with an out-of-memory error only in production. How should I debug this?"
+    category: problem_solving
+    expected: {domain: software_engineering, intent: troubleshooting, complexity: medium, strategy: debugging, orchestrate: false}
+    answer_quality: true
+
+  # ---- Problem Solving: Performance Analysis ----
+  - id: se-060
+    question: "Analyze why my API response time degrades as concurrent users increase, and identify the bottleneck."
+    category: problem_solving
+    expected: {domain: software_engineering, intent: performance_analysis, complexity: medium, strategy: analysis, orchestrate: false}
+    answer_quality: true
+  - id: se-061
+    question: "Analyze end-to-end latency bottlenecks in a system spanning a CDN, application servers, and a data warehouse."
+    category: problem_solving
+    expected: {domain: software_engineering, intent: performance_analysis, complexity: complex, strategy: analysis, orchestrate: true}
+    answer_quality: true
+  - id: se-062
+    question: "Why is a bulk INSERT of 10 million rows slower than expected, and how can it be tuned?"
+    category: problem_solving
+    expected: {domain: software_engineering, intent: performance_analysis, complexity: medium, strategy: analysis, orchestrate: false}
+    answer_quality: true
+
+  # ---- Problem Solving: Architecture Design ----
+  - id: se-070
+    question: "Design the module structure for a monorepo with several shared packages and clear dependency boundaries."
+    category: problem_solving
+    expected: {domain: software_engineering, intent: architecture_design, complexity: medium, strategy: analysis, orchestrate: false}
+    answer_quality: true
+  - id: se-071
+    question: "Design a scalable microservices architecture for an e-commerce platform covering orders, payments, and inventory."
+    category: problem_solving
+    expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: analysis, orchestrate: true}
+    answer_quality: true
+  - id: se-072
+    question: "Design a caching layer for a read-heavy news website, including invalidation strategy."
+    category: problem_solving
+    expected: {domain: software_engineering, intent: architecture_design, complexity: medium, strategy: analysis, orchestrate: false}
+    answer_quality: true
+
+  # ---- Evaluation: Comparison ----
+  - id: se-080
+    question: "Compare gRPC and REST for inter-service communication in a microservices environment."
+    category: evaluation
+    expected: {domain: software_engineering, intent: comparison, complexity: medium, strategy: analysis, orchestrate: false}
+    answer_quality: true
+  - id: se-081
+    question: "Compare the Go defer statement with C++ RAII for resource management."
+    category: evaluation
+    expected: {domain: software_engineering, intent: comparison, complexity: simple, strategy: analysis, orchestrate: false}
+    answer_quality: true
+
+  # ---- Evaluation: Code Review ----
+  - id: se-090
+    question: "Review this Python function for correctness and style: <code>def sum(a, b): return a + b  # never used</code>"
+    category: evaluation
+    expected: {domain: software_engineering, intent: code_review, complexity: simple, strategy: analysis, orchestrate: false}
+    answer_quality: true
+  - id: se-091
+    question: "Perform a security-focused code review of this authentication snippet: <code>if user.password == request.password: login(user)</code>"
+    category: evaluation
+    expected: {domain: software_engineering, intent: code_review, complexity: medium, strategy: analysis, orchestrate: false}
+    answer_quality: true
+
+  # ---- Generation: Code Generation ----
+  - id: se-100
+    question: "Write a Python function that checks whether a string is a palindrome."
+    category: generation
+    expected: {domain: software_engineering, intent: generate_code, complexity: simple, strategy: code_snippet, orchestrate: false}
+    answer_quality: true
+  - id: se-101
+    question: "Write a Python function that reads a CSV file, validates each row, and returns a summary of invalid rows."
+    category: generation
+    expected: {domain: software_engineering, intent: generate_code, complexity: medium, strategy: code_snippet, orchestrate: false}
+    answer_quality: true
+  - id: se-102
+    question: "Build a complete CLI tool in Python with argument parsing, a config file, and unit tests."
+    category: generation
+    expected: {domain: software_engineering, intent: generate_code, complexity: complex, strategy: code_snippet, orchestrate: true}
+    answer_quality: true
+
+  # ---- Boundary: SE / non-SE ----
+  - id: se-110
+    question: "Recommend a good restaurant in Tokyo."
+    category: boundary
+    expected: {domain: other, intent: null, complexity: null, strategy: reject, orchestrate: false}
+    answer_quality: false
+  - id: se-111
+    question: "Explain the causes of the French Revolution."
+    category: boundary
+    expected: {domain: other, intent: null, complexity: null, strategy: reject, orchestrate: false}
+    answer_quality: false
+  - id: se-112
+    question: "What is the capital of Australia?"
+    category: boundary
+    expected: {domain: other, intent: null, complexity: null, strategy: reject, orchestrate: false}
+    answer_quality: false
+
+  # ---- Boundary: FAQ / Concept Explain ----
+  - id: se-120
+    question: "What is a hash function?"
+    category: boundary
+    expected: {domain: software_engineering, intent: faq, complexity: simple, strategy: direct, orchestrate: false}
+    answer_quality: true
+  - id: se-121
+    question: "Why are hash tables fast for key lookups?"
+    category: boundary
+    expected: {domain: software_engineering, intent: concept_explain, complexity: simple, strategy: teaching, orchestrate: false}
+    answer_quality: true
+
+  # ---- Boundary: Tutorial / Learning Guide ----
+  - id: se-130
+    question: "Teach me Git branching with hands-on commands."
+    category: boundary
+    expected: {domain: software_engineering, intent: tutorial, complexity: simple, strategy: teaching, orchestrate: false}
+    answer_quality: true
+  - id: se-131
+    question: "Plan out a full curriculum to master Kubernetes from beginner to advanced."
+    category: boundary
+    expected: {domain: software_engineering, intent: learning_guide, complexity: medium, strategy: teaching, orchestrate: false}
+    answer_quality: true
+
+  # ---- Boundary: Troubleshooting / Performance Analysis ----
+  - id: se-140
+    question: "My service became slow right after deploying the new caching layer. Why might that be?"
+    category: boundary
+    expected: {domain: software_engineering, intent: troubleshooting, complexity: medium, strategy: debugging, orchestrate: false}
+    answer_quality: true
+  - id: se-141
+    question: "Compare the performance of an in-process cache versus a distributed cache for a read-heavy workload."
+    category: boundary
+    expected: {domain: software_engineering, intent: performance_analysis, complexity: medium, strategy: analysis, orchestrate: false}
+    answer_quality: true
+
+  # ---- Boundary: Comparison / Architecture Design ----
+  - id: se-150
+    question: "Should we use event-driven or request-response architecture for our notification service?"
+    category: boundary
+    expected: {domain: software_engineering, intent: architecture_design, complexity: medium, strategy: analysis, orchestrate: false}
+    answer_quality: true
+  - id: se-151
+    question: "Compare queues and topics as messaging primitives."
+    category: boundary
+    expected: {domain: software_engineering, intent: comparison, complexity: simple, strategy: analysis, orchestrate: false}
+    answer_quality: true
+
+  # ---- Boundary: Medium / Complex ----
+  - id: se-160
+    question: "How should we scale our PostgreSQL database to handle 10x the current read volume?"
+    category: boundary
+    expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: analysis, orchestrate: true}
+    answer_quality: true
+  - id: se-161
+    question: "Explain the full request lifecycle of a React application from URL entry to paint."
+    category: boundary
+    expected: {domain: software_engineering, intent: concept_explain, complexity: complex, strategy: teaching, orchestrate: true}
+    answer_quality: true

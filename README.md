@@ -102,6 +102,29 @@ uv run python -m agent.observability report --day 2026-08-11
 
 `phase_map` optionally remaps the built-in phase names (see `agent/observability/patch.py::DEFAULT_PHASES`). Disabled by default; when disabled the agent behaves exactly as before.
 
+## Evaluation
+
+Golden-dataset evaluation for classification, routing, answer quality, and cost:
+
+```bash
+uv run python -m agent.evaluation run                      # full run (all metrics)
+uv run python -m agent.evaluation run --skip-quality       # classification/routing/cost only
+uv run python -m agent.evaluation run --label my-run       # named result file
+uv run python -m agent.evaluation run --results-dir out/   # override the results dir
+```
+
+Datasets live in `evaluation/datasets/` (one YAML file per domain). Each run writes
+a timestamped JSON result to `evaluation/results/` (gitignored). Compare two runs:
+
+```bash
+uv run python -m agent.evaluation diff evaluation/results/2026-08-14-a.json \
+                                   evaluation/results/2026-08-14-b.json
+```
+
+Answer-quality judging uses `evaluation.judge_model` from `config.json` (falls back to `model`).
+Evaluation is independent of observability: it reads pipeline return values and its
+own usage recorder, so disabling observability does not affect evaluation.
+
 ## Testing
 
 ### Unit tests

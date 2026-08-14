@@ -24,6 +24,12 @@ class ObservabilityConfig:
 
 
 @dataclass
+class EvaluationConfig:
+    judge_model: str | None = None
+    results_dir: str = "evaluation/results"
+
+
+@dataclass
 class AgentConfig:
     base_url: str
     model: str
@@ -32,6 +38,7 @@ class AgentConfig:
     model_low: str | None = None
     model_high: str | None = None
     observability: ObservabilityConfig | None = None
+    evaluation: EvaluationConfig | None = None
 
 
 def _read_json_file(path: str) -> dict:
@@ -94,6 +101,17 @@ def load_config(path: str | None = None) -> AgentConfig:
             phase_map=phase_map if isinstance(phase_map, dict) else {},
         )
 
+    raw_eval = raw.get("evaluation")
+    evaluation = None
+    if isinstance(raw_eval, dict):
+        judge_model = raw_eval.get("judge_model")
+        judge_model = judge_model if isinstance(judge_model, str) and judge_model else None
+        results_dir = raw_eval.get("results_dir") or "evaluation/results"
+        evaluation = EvaluationConfig(
+            judge_model=judge_model,
+            results_dir=results_dir if isinstance(results_dir, str) else "evaluation/results",
+        )
+
     return AgentConfig(
         base_url=base_url,
         model=model,
@@ -102,6 +120,7 @@ def load_config(path: str | None = None) -> AgentConfig:
         model_low=model_low,
         model_high=model_high,
         observability=observability,
+        evaluation=evaluation,
     )
 
 

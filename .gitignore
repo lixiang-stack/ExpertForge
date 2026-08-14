@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 .worktrees/
+.superpowers/
 config.json
 .env
 .DS_Store
