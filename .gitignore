@@ -6,3 +6,4 @@ config.json
 .env
 .DS_Store
 .observability/
+evaluation/results/
