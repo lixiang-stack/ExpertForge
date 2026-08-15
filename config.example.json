@@ -4,6 +4,10 @@
   "model_low": "",
   "model_high": "",
   "domain_dir": "domain/software_engineering",
+  "evaluation": {
+    "judge_model": "deepseek-v4-pro",
+    "results_dir": "evaluation/results"
+  },
   "observability": {
     "enabled": true,
     "data_dir": ".observability",

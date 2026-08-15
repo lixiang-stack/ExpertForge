@@ -408,3 +408,40 @@ def test_load_config_observability_ignores_non_dict(tmp_path, monkeypatch):
     })
     cfg = load_config(path)
     assert cfg.observability is None
+
+
+def test_load_config_evaluation_judge_model_and_results_dir(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "evaluation": {"judge_model": "judge-a", "results_dir": "eval/results"},
+    })
+    cfg = load_config(path)
+    assert cfg.evaluation is not None
+    assert cfg.evaluation.judge_model == "judge-a"
+    assert cfg.evaluation.results_dir == "eval/results"
+
+
+def test_load_config_evaluation_defaults(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+    })
+    cfg = load_config(path)
+    assert cfg.evaluation is None
+
+
+def test_load_config_evaluation_ignores_non_dict(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "evaluation": "nope",
+    })
+    cfg = load_config(path)
+    assert cfg.evaluation is None

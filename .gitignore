@@ -2,8 +2,10 @@
 __pycache__/
 *.pyc
 .worktrees/
+.superpowers/
 config.json
 .env
 .DS_Store
 .observability/
-evaluation/results/
+evaluation/results/*
+!evaluation/results/baseline.json

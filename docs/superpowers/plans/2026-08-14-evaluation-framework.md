@@ -448,21 +448,6 @@ def test_load_dataset_missing_cases(tmp_path):
         load_dataset(_dataset_path(tmp_path, "domain: se\n"))
 
 
-def test_load_dataset_unknown_intent(tmp_path):
-    with pytest.raises(DatasetError):
-        load_dataset(_dataset_path(tmp_path,
-            'domain: software_engineering\n'
-            'cases:\n'
-            '  - id: a\n'
-            '    question: "q"\n'
-            '    category: knowledge\n'
-            '    expected:\n'
-            '      domain: software_engineering\n'
-            '      intent: bogus\n'
-            '      complexity: simple\n'
-            '      strategy: direct\n'))
-
-
 def test_load_dataset_invalid_complexity(tmp_path):
     with pytest.raises(DatasetError):
         load_dataset(_dataset_path(tmp_path,
@@ -637,13 +622,15 @@ def load_dataset(path: str) -> Dataset:
 
 - [ ] **Step 4: Run test to verify it passes**
 
+> Decision (task execution): `test_load_dataset_unknown_intent` was removed by human decision on 2026-08-14. The plan's verbatim implementation only validates intent as a non-empty string (path-agnostic per spec §3.1); an intent-value allow-list would couple the loader to a specific domain. A bogus intent loads and surfaces as a metrics mismatch instead of a load error.
+
 Run: `uv run pytest tests/test_evaluation_dataset.py -v`
-Expected: PASS (11 tests).
+Expected: PASS (10 tests).
 
 - [ ] **Step 5: Full regression**
 
 Run: `uv run pytest -q`
-Expected: all pass (68 + 11 = 79).
+Expected: all pass (68 + 10 = 78).
 
 - [ ] **Step 6: Commit**
 
@@ -999,7 +986,7 @@ def test_run_evaluation_answers_and_judges():
     assert r0.strategy == "direct"
     assert r0.orchestrate is False
     assert r0.answer == "the answer"
-    assert r0.actual_model == "judge-a"  # judge call is last
+    assert r0.actual_model == "low-a"  # answer call model (judge excluded)
     assert r0.expected_model == "low-a"
     assert r0.scorecard is not None
     assert r0.scorecard["correctness"] == 4
@@ -1022,7 +1009,7 @@ def test_run_evaluation_rejects_out_of_domain():
     assert r1.answer is None
     assert r1.scorecard is None
     assert r1.llm_calls == 1
-    assert r1.actual_model == "cm"
+    assert r1.actual_model is None  # out-of-domain: no answer call
 
 
 def test_run_evaluation_skip_quality_skips_answer():
@@ -1157,12 +1144,13 @@ def run_evaluation(
         expected_model = resolve_model(config, domain, route, config.model)
         answer = None
         scorecard = None
+        actual_model = None
         if case.answer_quality and not skip_quality:
             resp = chat.respond(case.question, route=route)
             answer = resp.text
+            actual_model = recorder.calls[-1]["model"] if recorder.calls else None
             scorecard = judge.score(case.question, answer, reference=case.reference)
         costs = _sum_calls(recorder.calls)
-        actual_model = recorder.calls[-1]["model"] if recorder.calls else None
         results.append(CaseResult(
             case=case,
             in_domain=route.in_domain,
@@ -1180,6 +1168,8 @@ def run_evaluation(
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
+
+> Decision (whole-branch review, 2026-08-14): `model_routing_accuracy` (spec §4.2) must measure the model used for the ANSWER call, excluding out-of-domain cases (no answer call). The original plan captured `actual_model = recorder.calls[-1]["model"]` — the LAST call, which for judged cases is the judge — and included OOD cases. By human decision this was FIXED: `actual_model` is now captured right after the answer call (before the judge runs) and stays `None` when there is no answer call. The implementation and test text above already reflect this.
 
 Run: `uv run pytest tests/test_evaluation_runner.py -v`
 Expected: PASS (the `agent.evaluation.judge` module already exists from Task 5).
@@ -1617,14 +1607,14 @@ def test_format_summary_contains_key_sections():
     assert "run1" in text
     assert "classification" in text.lower()
     assert "routing" in text.lower()
-    assert "answer_quality" in text.lower()
+    assert "answer quality" in text.lower()  # human-readable header, not snake_case
     assert "cost" in text.lower()
     assert "domain_accuracy" in text
     assert "intent_accuracy" in text
     assert "strategy_accuracy" in text
     assert "model_routing_accuracy" in text
     assert "correctness" in text
-    assert "total_tokens" in text
+    assert "total=" in text  # _fmt_cost renders compact labels
     assert "simple" in text
 ```
 
@@ -1759,6 +1749,8 @@ def format_summary(record: dict) -> str:
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
+
+> Decision (task execution): `test_format_summary_contains_key_sections` asserted two snake_case strings (`answer_quality`, `total_tokens`) the human-readable summary never emits. By human decision on 2026-08-14 the TEST was the defect; the assertions were loosened to `"answer quality"` and `"total="` (the test text above already reflects this).
 
 Run: `uv run pytest tests/test_evaluation_report.py -v`
 Expected: PASS (3 tests).
@@ -2085,11 +2077,24 @@ def test_main_missing_config_returns_1(tmp_path, monkeypatch, capsys):
 
 
 def test_main_bad_dataset_returns_1(tmp_path, monkeypatch, capsys):
+    domain_dir = tmp_path / "software_engineering"
+    domain_dir.mkdir()
+    (domain_dir / "domain.json").write_text(
+        '{"name": "sw", "description": "d", "out_of_domain_reply": "Out."}',
+        encoding="utf-8",
+    )
+    (domain_dir / "intents.yaml").write_text("- id: faq\n  description: quick\n", encoding="utf-8")
+    (domain_dir / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
+    (domain_dir / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (domain_dir / "prompts").mkdir()
+    (domain_dir / "prompts" / "direct.md").write_text("d", encoding="utf-8")
+    (domain_dir / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
+
     config_dir = tmp_path / "cfg"
     config_dir.mkdir()
     config_path = config_dir / "config.json"
     config_path.write_text(
-        f'{{"base_url": "https://x", "model": "m", "domain_dir": "{tmp_path}"}}',
+        f'{{"base_url": "https://x", "model": "m", "domain_dir": "{domain_dir}"}}',
         encoding="utf-8",
     )
     monkeypatch.delenv("AGENT_BASE_URL", raising=False)
@@ -2100,6 +2105,8 @@ def test_main_bad_dataset_returns_1(tmp_path, monkeypatch, capsys):
     err = capsys.readouterr().err
     assert "Dataset error" in err
 ```
+
+> Decision (task execution): the original test pointed `domain_dir` at a bare `tmp_path` (no domain config), so the verbatim `_cmd_run`'s `load_domain_config` fired before `load_dataset` and printed "Config error" instead of "Dataset error". By human decision on 2026-08-14 the TEST was the defect; it now builds a valid domain dir (test text above reflects this), so a bad dataset genuinely surfaces as "Dataset error".
 
 Note: the CLI resolves the default dataset path from the config's `domain_dir` basename — with `--dataset` given explicitly, that logic is skipped.
 
@@ -2557,9 +2564,11 @@ Expected: PASS.
 - [ ] **Step 5: Count the cases**
 
 Run: `rg -c '^  - id:' evaluation/datasets/software_engineering.yaml`
-Expected: 42 (>= 40).
+Expected: 46 (>= 40).
 
 - [ ] **Step 6: Full regression**
+
+> Note: the brief originally said "42" cases but the committed YAML has 46 (se-001..se-161). The test's real gate is `>= 40`; the "42" was a stale count. Real gate is "all pass".
 
 Run: `uv run pytest -q`
 Expected: all pass (111 + 1 = 112).

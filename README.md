@@ -102,6 +102,73 @@ uv run python -m agent.observability report --day 2026-08-11
 
 `phase_map` optionally remaps the built-in phase names (see `agent/observability/patch.py::DEFAULT_PHASES`). Disabled by default; when disabled the agent behaves exactly as before.
 
+## Evaluation
+
+Golden-dataset evaluation for classification, routing, answer quality, and cost:
+
+```bash
+uv run python -m agent.evaluation run                      # full run (all metrics)
+uv run python -m agent.evaluation run --skip-quality       # classification/routing/cost only
+uv run python -m agent.evaluation run --label my-run       # named result file
+uv run python -m agent.evaluation run --results-dir out/   # override the results dir
+uv run python -m agent.evaluation run --suite direct teaching  # run specific suites by name
+uv run python -m agent.evaluation run --max-per-suite 5    # cap cases per suite
+```
+
+Datasets live in `evaluation/datasets/<domain>/` — one directory per domain,
+containing one YAML file per suite (e.g. `software_engineering/` holds
+`classification.yaml`, `routing.yaml`, `direct.yaml`, `teaching.yaml`,
+`debugging.yaml`, `analysis.yaml`, `code_snippet.yaml`, and
+`orchestration.yaml`). A single YAML file can also be passed directly. Each run
+writes a timestamped JSON result to `evaluation/results/` (gitignored). Compare
+two runs:
+
+```bash
+# compare two run results (use the paths printed by each run)
+uv run python -m agent.evaluation diff evaluation/results/2026-08-15-a.json \
+                                   evaluation/results/2026-08-15-b.json
+```
+
+### Baseline tracking
+
+Full result files (with per-case answers) are gitignored so the repo stays clean.
+To keep a small, committed record of where the system stands — and to see how
+each iteration moves it — record a **baseline** after a run:
+
+```bash
+# 1. run the evaluation; give the run a distinct label so it doesn't overwrite an
+#    earlier result (file = {today}-{label}.json), and note the printed path
+uv run python -m agent.evaluation run --label after-prompt-fix
+
+# 2. record the baseline from that result file (use the path printed in step 1);
+#    if a baseline.json already exists, the new vs. old metrics diff is printed
+uv run python -m agent.evaluation baseline evaluation/results/2026-08-15-after-prompt-fix.json
+```
+
+The first time only — before any baseline exists — run once and record it as the
+starting point (`run --label initial`, then `baseline <its path>`); from then on,
+each iteration needs just the single `run` + `baseline` pair above.
+
+`baseline` writes a metrics-only snapshot (classification/routing/answer-quality
+accuracy and cost per suite — no case-level answers) to
+`evaluation/results/baseline.json`, which is committed. This file is the single
+exception to the `evaluation/results/` ignore rule.
+
+**When to record a baseline:** after any change that is meant to affect quality
+or cost — prompt edits, model/strategy/domain changes, new evaluation cases —
+commit the updated `baseline.json` together with the change that produced it.
+
+**How to evaluate the effect:** every `baseline` run against an existing
+`baseline.json` prints a metrics diff (previous vs. new) right away, so you see
+whether the change helped. Beyond that, the committed file's git history is the
+iteration log: `git log -p evaluation/results/baseline.json` shows each
+improvement or regression over time. For a deep per-case comparison of two full
+runs, use `diff` above.
+
+Answer-quality judging uses `evaluation.judge_model` from `config.json` (falls back to `model`).
+Evaluation is independent of observability: it reads pipeline return values and its
+own usage recorder, so disabling observability does not affect evaluation.
+
 ## Testing
 
 ### Unit tests

@@ -1,0 +1,13 @@
+cases:
+  - id: se-110
+    question: "Recommend a good restaurant in Tokyo."
+    expected: {domain: other, intent: null, complexity: null, strategy: reject, orchestrate: false}
+    answer_quality: false
+  - id: se-120
+    question: "What is a hash function?"
+    expected: {domain: software_engineering, intent: faq, complexity: simple, strategy: direct, orchestrate: false}
+    answer_quality: true
+  - id: se-140
+    question: "My service became slow right after deploying the new caching layer. Why might that be?"
+    expected: {domain: software_engineering, intent: troubleshooting, complexity: medium, strategy: debugging, orchestrate: false}
+    answer_quality: true

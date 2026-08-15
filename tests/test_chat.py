@@ -90,3 +90,15 @@ def test_respond_uses_complexity_routed_model():
     assert resp.kind == "answer"
     # first call: classification (model=cm); second call: generator (model=low)
     assert client.models == ["cm", "low-a"]
+
+
+def test_respond_with_precomputed_route_skips_classification():
+    from agent.router import RouteResult
+
+    client = FakeClient(["the answer"])
+    chat = Chat(client, _config(), _domain())
+    route = RouteResult(in_domain=True, strategy="direct", intent="faq", complexity="simple")
+    resp = chat.respond("what is defer", route=route)
+    assert resp.kind == "answer"
+    assert resp.text == "the answer"
+    assert client.models == ["m"]  # only the answer call; classification was skipped
