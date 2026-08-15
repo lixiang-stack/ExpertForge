@@ -119,10 +119,10 @@ class Installed:
     # passthrough when no install is active.
 
     def _wrap_respond(self, original, key):
-        def wrapper(chat, question):
+        def wrapper(chat, question, *, route=None):
             inst = _current_inst()
             if inst is None:
-                return original(chat, question)  # passthrough: real business call
+                return original(chat, question, route=route)  # passthrough: real business call
             with trace_span() as tid:
                 ph = inst._phase(key)
                 try:
@@ -131,7 +131,7 @@ class Installed:
                                       "domain": getattr(chat.domain, "name", None)})
                 except Exception as e:  # noqa: BLE001 - degrade, never break business
                     warnings.warn(f"observability: failed to record trace_start: {e}")
-                response = original(chat, question)  # <-- real business call
+                response = original(chat, question, route=route)  # <-- real business call
                 calls = inst.store.trace_llm_calls(tid)
                 total_tokens = sum(c.get("total_tokens") or 0 for c in calls)
                 total_lat = sum(c.get("latency_ms") or 0 for c in calls)

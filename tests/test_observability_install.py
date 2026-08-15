@@ -1,8 +1,7 @@
-import threading
-
 import pytest
 
 from agent.config import AgentConfig, ObservabilityConfig
+from agent.llm import ChatResult
 from agent.observability import install
 from agent.observability import patch as patch_mod
 from agent.observability.tracing import read_events
@@ -19,10 +18,9 @@ class FakeClient:
 
     def __init__(self, responses):
         self._responses = list(responses)
-        self._usage_local = threading.local()
 
     def chat_completion(self, messages, *, model=None, temperature=0.3, **kwargs):
-        return self._responses.pop(0)
+        return ChatResult(text=self._responses.pop(0), model=model or self.model)
 
     def chat_completion_stream(self, messages, **kwargs):
         return iter([])

@@ -26,7 +26,7 @@ class Strategy:
         return messages
 
     def process(self, client, question: str, history: list[tuple[str, str]], *, model: str | None = None) -> str:
-        return client.chat_completion(self.build_messages(history, question), model=model)
+        return client.chat_completion(self.build_messages(history, question), model=model).text
 
 
 def build_registry(domain: DomainConfig) -> dict[str, Strategy]:

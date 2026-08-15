@@ -2,6 +2,7 @@ import json
 
 from agent.chat import Chat
 from agent.config import AgentConfig, load_domain_config
+from agent.llm import ChatResult
 
 
 def _write_finance_domain(tmp_path):
@@ -52,7 +53,7 @@ class FakeClient:
 
     def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False, json_schema=None):
         self.calls.append(messages)
-        return self.responses.pop(0)
+        return ChatResult(text=self.responses.pop(0), model=model or "m")
 
 
 def test_custom_strategy_answers_without_code_changes(tmp_path):

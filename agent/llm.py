@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import threading
+from dataclasses import dataclass
 from typing import Iterator
 
 from openai import OpenAI, OpenAIError
@@ -10,11 +10,20 @@ class LLMError(Exception):
     """Raised when an LLM API call fails."""
 
 
+@dataclass
+class ChatResult:
+    text: str
+    model: str
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    cache_tokens: int = 0
+
+
 class LLMClient:
     def __init__(self, base_url: str, api_key: str, model: str, timeout: float = 60.0):
         self.client = OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
         self.model = model
-        self._usage_local = threading.local()
 
     def chat_completion(
         self,
@@ -25,7 +34,7 @@ class LLMClient:
         disable_thinking: bool = False,
         json_mode: bool = False,
         json_schema: dict | None = None,
-    ) -> str:
+    ) -> ChatResult:
         try:
             kwargs = {
                 "model": model or self.model,
@@ -47,12 +56,17 @@ class LLMClient:
             if disable_thinking:
                 kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
             resp = self.client.chat.completions.create(**kwargs)
-            content = resp.choices[0].message.content
-            self._usage_local.usage = resp.usage
-            details = getattr(resp.usage, "prompt_tokens_details", None)
+            u = resp.usage
+            details = getattr(u, "prompt_tokens_details", None)
             cached = getattr(details, "cached_tokens", None)
-            self._usage_local.cache_tokens = cached if isinstance(cached, int) else 0
-            return content or ""
+            return ChatResult(
+                text=resp.choices[0].message.content or "",
+                model=resp.model or (model or self.model),
+                prompt_tokens=getattr(u, "prompt_tokens", 0) if u else 0,
+                completion_tokens=getattr(u, "completion_tokens", 0) if u else 0,
+                total_tokens=getattr(u, "total_tokens", 0) if u else 0,
+                cache_tokens=cached if isinstance(cached, int) else 0,
+            )
         except OpenAIError as e:
             raise LLMError(f"LLM API call failed: {e}") from e
 

@@ -1,6 +1,7 @@
 import json
 
 from agent import agent_cli
+from agent.llm import ChatResult
 
 
 def _write_root_config(tmp_path, domain_dir):
@@ -59,7 +60,10 @@ def test_main_runs_repl(tmp_path, monkeypatch, capsys):
         def chat_completion(
             self, messages, model=None, disable_thinking=False, json_mode=False, json_schema=None
         ):
-            return '{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}'
+            return ChatResult(
+                text='{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}',
+                model=model or "m",
+            )
 
     monkeypatch.setattr(agent_cli, "LLMClient", lambda *a, **k: FakeClient())
     assert agent_cli.main([str(config_path)]) == 0
@@ -81,7 +85,7 @@ def test_main_ask_prints_answer(tmp_path, monkeypatch, capsys):
         def chat_completion(
             self, messages, model=None, disable_thinking=False, json_mode=False, json_schema=None
         ):
-            return self.responses.pop(0)
+            return ChatResult(text=self.responses.pop(0), model=model or "m")
 
     monkeypatch.setattr(agent_cli, "LLMClient", lambda *a, **k: FakeClient())
     assert agent_cli.main([str(config_path), "--ask", "what is defer"]) == 0

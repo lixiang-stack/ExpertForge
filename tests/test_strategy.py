@@ -1,4 +1,5 @@
 from agent.config import DomainConfig, IntentDef, StrategyDef
+from agent.llm import ChatResult
 from agent.strategy import Strategy, build_registry
 
 
@@ -30,7 +31,7 @@ class FakeClient:
 
     def chat_completion(self, messages, model=None, disable_thinking=False):
         self.calls.append((messages, model))
-        return self.text
+        return ChatResult(text=self.text, model=model or "m")
 
 
 def test_build_registry_builds_each_strategy():

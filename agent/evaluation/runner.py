@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from agent.chat import Chat
 from agent.config import AgentConfig, DomainConfig
-from agent.llm import LLMClient
+from agent.llm import ChatResult, LLMClient
 from agent.model_router import resolve_model
 from agent.router import Router
 
@@ -16,8 +16,8 @@ from .judge import Judge
 class RecordingClient:
     """Thin LLMClient wrapper that records per-call usage and latency.
 
-    Reads the same thread-local `_usage_local` that `LLMClient` populates;
-    completely independent of observability.
+    Reads token usage from the returned ChatResult; completely independent
+    of observability.
     """
 
     def __init__(self, inner: LLMClient):
@@ -31,27 +31,21 @@ class RecordingClient:
     def reset(self) -> None:
         self.calls = []
 
-    def _usage(self):
-        usage = getattr(self._inner, "_usage_local", None)
-        return getattr(usage, "usage", None)
-
-    def chat_completion(self, messages, *, model=None, temperature=0.3, **kwargs) -> str:
+    def chat_completion(self, messages, *, model=None, temperature=0.3, **kwargs) -> ChatResult:
         started = time.perf_counter()
-        text = self._inner.chat_completion(
+        result = self._inner.chat_completion(
             messages, model=model, temperature=temperature, **kwargs
         )
         elapsed = round((time.perf_counter() - started) * 1000, 1)
-        u = self._usage()
-        usage_local = getattr(self._inner, "_usage_local", None)
         self.calls.append({
-            "model": model or self._inner.model,
-            "prompt_tokens": getattr(u, "prompt_tokens", 0) if u else 0,
-            "completion_tokens": getattr(u, "completion_tokens", 0) if u else 0,
-            "total_tokens": getattr(u, "total_tokens", 0) if u else 0,
-            "cache_tokens": getattr(usage_local, "cache_tokens", 0) if usage_local else 0,
+            "model": result.model,
+            "prompt_tokens": result.prompt_tokens,
+            "completion_tokens": result.completion_tokens,
+            "total_tokens": result.total_tokens,
+            "cache_tokens": result.cache_tokens,
             "latency_ms": elapsed,
         })
-        return text
+        return result
 
     def chat_completion_stream(self, messages, *, model=None, temperature=0.7, **kwargs):
         yield from self._inner.chat_completion_stream(

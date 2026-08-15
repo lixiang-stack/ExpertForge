@@ -1,12 +1,12 @@
-import threading
-
 import pytest
 
 from agent.chat import Chat
 from agent.config import AgentConfig, DomainConfig, IntentDef, ObservabilityConfig, StrategyDef
+from agent.llm import ChatResult
 from agent.observability import patch as patch_mod
 from agent.observability.client import TracedLLMClient
 from agent.observability.tracing import TraceStore, current_phase, read_events
+from agent.router import RouteResult
 
 
 @pytest.fixture(autouse=True)
@@ -18,12 +18,11 @@ def _reset_observability():
 class FakeInner:
     def __init__(self, responses):
         self._responses = list(responses)
-        self._usage_local = threading.local()
         self.seen_phases = []
 
     def chat_completion(self, messages, *, model=None, temperature=0.3, **kwargs):
         self.seen_phases.append(current_phase())
-        return self._responses.pop(0)
+        return ChatResult(text=self._responses.pop(0), model=model or "m")
 
     def chat_completion_stream(self, messages, **kwargs):
         return iter([])
@@ -120,7 +119,8 @@ def test_observability_failure_never_surfaces_into_business(tmp_path, monkeypatc
 
     monkeypatch.setattr(store, "write", _boom)
     patch_mod.Installed(store, {}).apply()
-    resp = chat.respond("what is defer")
+    with pytest.warns(UserWarning, match="observability: failed to record"):
+        resp = chat.respond("what is defer")
     assert resp.kind == "answer"
     assert resp.text == "the answer"
 
@@ -139,3 +139,29 @@ def test_install_wraps_orchestration_phases(tmp_path):
     # worker numbering restarts per trace: exactly worker.1 and worker.2
     assert "orchestration.worker.1" in inner.seen_phases
     assert "orchestration.worker.2" in inner.seen_phases
+
+
+def test_respond_forwards_route_kwarg_under_active_install(tmp_path):
+    store = _store(tmp_path)
+    inner = FakeInner(["the answer"])
+    chat = Chat(inner, _config(), _domain())
+    route = RouteResult(in_domain=True, strategy="direct", intent="faq", complexity="simple")
+    patch_mod.Installed(store, {}).apply()
+
+    resp = chat.respond("what is defer", route=route)
+
+    assert resp.kind == "answer"
+    assert resp.text == "the answer"
+
+
+def test_respond_forwards_route_kwarg_in_passthrough(tmp_path):
+    inner = FakeInner(["the answer"])
+    chat = Chat(inner, _config(), _domain())
+    route = RouteResult(in_domain=True, strategy="direct", intent="faq", complexity="simple")
+    patch_mod.Installed(_store(tmp_path), {}).apply()
+    patch_mod._ACTIVE = None
+
+    resp = chat.respond("what is defer", route=route)
+
+    assert resp.kind == "answer"
+    assert resp.text == "the answer"
