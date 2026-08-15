@@ -161,10 +161,10 @@ class ClassificationService:
         #         disable_thinking=True,
         #         json_mode=True,
         #     )
-        text = self.client.chat_completion(
+        result = self.client.chat_completion(
             messages,
             model=model,
             disable_thinking=True,
             json_mode=True,
         )
-        return validate_classification(_parse(text), intent_ids)
+        return validate_classification(_parse(result.text), intent_ids)

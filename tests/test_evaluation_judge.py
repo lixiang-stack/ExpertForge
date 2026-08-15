@@ -4,6 +4,7 @@ from agent.evaluation.judge import (
     build_judge_prompt,
     parse_scorecard,
 )
+from agent.llm import ChatResult
 
 
 class FakeClient:
@@ -17,7 +18,7 @@ class FakeClient:
         self.calls.append((messages, model, disable_thinking, json_mode, json_schema))
         if self.error is not None:
             raise self.error
-        return self.response
+        return ChatResult(text=self.response, model=model or "m")
 
 
 def test_build_judge_prompt_contains_question_answer_and_dimensions():

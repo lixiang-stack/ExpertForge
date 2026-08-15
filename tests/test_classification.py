@@ -7,7 +7,7 @@ from agent.classification import (
     validate_classification,
 )
 from agent.config import DomainConfig, IntentDef
-from agent.llm import LLMError
+from agent.llm import ChatResult, LLMError
 
 
 def _domain():
@@ -33,7 +33,7 @@ class FakeClient:
 
     def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False, json_schema=None):
         self.calls.append((messages, model, disable_thinking, json_mode, json_schema))
-        return self.responses.pop(0)
+        return ChatResult(text=self.responses.pop(0), model=model or "m")
 
 
 def _classify(text):

@@ -1,4 +1,5 @@
 from agent.config import AgentConfig, DomainConfig, IntentDef, StrategyDef
+from agent.llm import ChatResult
 from agent.orchestrator import Orchestrator
 from agent.router import RouteResult
 
@@ -32,7 +33,7 @@ class FakeClient:
 
     def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False, json_schema=None):
         self.calls.append((messages, model, disable_thinking, json_mode, json_schema))
-        return self.responses.pop(0)
+        return ChatResult(text=self.responses.pop(0), model=model or "m")
 
 
 def _route():

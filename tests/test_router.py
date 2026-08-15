@@ -1,6 +1,7 @@
 import json
 
 from agent.config import AgentConfig, DomainConfig, IntentDef, StrategyDef
+from agent.llm import ChatResult
 from agent.router import Router
 
 
@@ -50,7 +51,7 @@ class FakeClient:
         json_mode=False,
         json_schema=None,
     ):
-        return self.responses.pop(0)
+        return ChatResult(text=self.responses.pop(0), model=model or "m")
 
 
 def _combined(in_domain, intent, complexity, reason="ok"):

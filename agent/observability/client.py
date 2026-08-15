@@ -4,7 +4,7 @@ import time
 import warnings
 from typing import Iterator
 
-from agent.llm import LLMError
+from agent.llm import ChatResult, LLMError
 
 from .tracing import TraceStore, current_phase, current_trace_id, now_millis
 
@@ -20,13 +20,6 @@ class TracedLLMClient:
     def model(self) -> str:
         return self._inner.model
 
-    def _usage_tokens(self):
-        usage = getattr(self._inner, "_usage_local", None)
-        u = getattr(usage, "usage", None)
-        if u is None:
-            return None, None, None
-        return getattr(u, "prompt_tokens", None), getattr(u, "completion_tokens", None), getattr(u, "total_tokens", None)
-
     def _base_event(self) -> dict:
         return {
             "type": "llm_call",
@@ -41,10 +34,10 @@ class TracedLLMClient:
         except Exception as e:  # noqa: BLE001 - degrade, never break business
             warnings.warn(f"observability: failed to record llm_call: {e}")
 
-    def chat_completion(self, messages, *, model=None, temperature=0.3, **kwargs) -> str:
+    def chat_completion(self, messages, *, model=None, temperature=0.3, **kwargs) -> ChatResult:
         started = time.perf_counter()
         try:
-            text = self._inner.chat_completion(
+            result = self._inner.chat_completion(
                 messages, model=model, temperature=temperature, **kwargs
             )
         except LLMError as e:
@@ -55,14 +48,14 @@ class TracedLLMClient:
                        "status": "error", "error": str(e)})
             self._write(ev)
             raise
-        p, c, t = self._usage_tokens()
         ev = self._base_event()
-        ev.update({"model": model or self._inner.model, "prompt_tokens": p,
-                   "completion_tokens": c, "total_tokens": t,
+        ev.update({"model": result.model, "prompt_tokens": result.prompt_tokens,
+                   "completion_tokens": result.completion_tokens,
+                   "total_tokens": result.total_tokens,
                    "latency_ms": round((time.perf_counter() - started) * 1000, 1),
                    "status": "ok", "error": None})
         self._write(ev)
-        return text
+        return result
 
     def chat_completion_stream(self, messages, *, model=None, temperature=0.7, **kwargs) -> Iterator[str]:
         # Not observed in v1: the main flow never uses streaming.

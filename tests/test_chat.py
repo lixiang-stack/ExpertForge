@@ -1,5 +1,6 @@
 from agent.chat import Chat
 from agent.config import AgentConfig, DomainConfig, IntentDef, StrategyDef
+from agent.llm import ChatResult
 
 
 def _domain():
@@ -38,7 +39,7 @@ class FakeClient:
         self, messages, model=None, disable_thinking=False, json_mode=False, json_schema=None
     ):
         self.models.append(model)
-        return self.responses.pop(0)
+        return ChatResult(text=self.responses.pop(0), model=model or "m")
 
 
 def test_respond_reject():
