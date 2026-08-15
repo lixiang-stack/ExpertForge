@@ -119,7 +119,8 @@ def test_observability_failure_never_surfaces_into_business(tmp_path, monkeypatc
 
     monkeypatch.setattr(store, "write", _boom)
     patch_mod.Installed(store, {}).apply()
-    resp = chat.respond("what is defer")
+    with pytest.warns(UserWarning, match="observability: failed to record"):
+        resp = chat.respond("what is defer")
     assert resp.kind == "answer"
     assert resp.text == "the answer"
 
