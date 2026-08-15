@@ -1,0 +1,9 @@
+cases:
+  - id: se-100
+    question: "Write a Python function that checks whether a string is a palindrome."
+    expected: {domain: software_engineering, intent: generate_code, complexity: simple, strategy: code_snippet, orchestrate: false}
+    answer_quality: true
+  - id: se-101
+    question: "Write a Python function that reads a CSV file, validates each row, and returns a summary of invalid rows."
+    expected: {domain: software_engineering, intent: generate_code, complexity: medium, strategy: code_snippet, orchestrate: false}
+    answer_quality: true

@@ -1,0 +1,13 @@
+cases:
+  - id: se-062
+    question: "Why is a bulk INSERT of 10 million rows slower than expected, and how can it be tuned?"
+    expected: {domain: software_engineering, intent: performance_analysis, complexity: medium, strategy: analysis, orchestrate: false}
+    answer_quality: true
+  - id: se-070
+    question: "Design the module structure for a monorepo with several shared packages and clear dependency boundaries."
+    expected: {domain: software_engineering, intent: architecture_design, complexity: medium, strategy: analysis, orchestrate: false}
+    answer_quality: true
+  - id: se-081
+    question: "Compare the Go defer statement with C++ RAII for resource management."
+    expected: {domain: software_engineering, intent: comparison, complexity: simple, strategy: analysis, orchestrate: false}
+    answer_quality: true

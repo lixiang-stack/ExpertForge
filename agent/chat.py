@@ -7,7 +7,7 @@ from .llm import LLMClient
 from .model_router import resolve_model
 from .orchestrator import Orchestrator
 from .strategy import build_registry
-from .router import Router
+from .router import RouteResult, Router
 
 
 @dataclass
@@ -26,8 +26,9 @@ class Chat:
         self.orchestrator = Orchestrator(client, config, domain)
         self.history: list[tuple[str, str]] = []
 
-    def respond(self, question: str) -> ChatResponse:
-        route = self.router.route(question)
+    def respond(self, question: str, *, route: RouteResult | None = None) -> ChatResponse:
+        if route is None:
+            route = self.router.route(question)
         if not route.in_domain:
             text = self.domain.out_of_domain_reply
             if route.reject_reason:

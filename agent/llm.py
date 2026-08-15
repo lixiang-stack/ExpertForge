@@ -49,6 +49,9 @@ class LLMClient:
             resp = self.client.chat.completions.create(**kwargs)
             content = resp.choices[0].message.content
             self._usage_local.usage = resp.usage
+            details = getattr(resp.usage, "prompt_tokens_details", None)
+            cached = getattr(details, "cached_tokens", None)
+            self._usage_local.cache_tokens = cached if isinstance(cached, int) else 0
             return content or ""
         except OpenAIError as e:
             raise LLMError(f"LLM API call failed: {e}") from e

@@ -222,3 +222,40 @@ def test_chat_completion_returns_text_unaffected(mock_openai):
     text = client.chat_completion([{"role": "user", "content": "hi"}])
 
     assert text == "你好"
+
+
+def _usage_with_cache(prompt, completion, cached=0):
+    u = MagicMock()
+    u.prompt_tokens = prompt
+    u.completion_tokens = completion
+    u.total_tokens = prompt + completion
+    details = MagicMock()
+    details.cached_tokens = cached
+    u.prompt_tokens_details = details
+    return u
+
+
+@patch("agent.llm.OpenAI")
+def test_chat_completion_records_cache_tokens(mock_openai):
+    resp = MagicMock()
+    resp.choices[0].message.content = "x"
+    resp.usage = _usage_with_cache(10, 5, cached=7)
+    mock_openai.return_value.chat.completions.create.return_value = resp
+
+    client = LLMClient("https://api.example.com/v1", "key", "model-a")
+    client.chat_completion([{"role": "user", "content": "hi"}])
+
+    assert client._usage_local.cache_tokens == 7
+
+
+@patch("agent.llm.OpenAI")
+def test_chat_completion_cache_tokens_zero_when_absent(mock_openai):
+    resp = MagicMock()
+    resp.choices[0].message.content = "x"
+    resp.usage = _usage(10, 5)  # no prompt_tokens_details
+    mock_openai.return_value.chat.completions.create.return_value = resp
+
+    client = LLMClient("https://api.example.com/v1", "key", "model-a")
+    client.chat_completion([{"role": "user", "content": "hi"}])
+
+    assert client._usage_local.cache_tokens == 0
