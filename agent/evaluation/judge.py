@@ -73,7 +73,7 @@ class Judge:
         prompt = build_judge_prompt(question, answer, reference=reference)
         messages = [{"role": "system", "content": prompt}]
         try:
-            text = self.client.chat_completion(
+            result = self.client.chat_completion(
                 messages,
                 model=self.model,
                 disable_thinking=True,
@@ -81,4 +81,4 @@ class Judge:
             )
         except LLMError:
             return None
-        return parse_scorecard(text)
+        return parse_scorecard(result.text)

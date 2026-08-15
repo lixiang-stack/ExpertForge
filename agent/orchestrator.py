@@ -116,10 +116,10 @@ class Orchestrator:
         #     text = self.client.chat_completion(
         #         degraded_messages, model=model, disable_thinking=True, json_mode=True
         #     )
-        text = self.client.chat_completion(
+        result = self.client.chat_completion(
             messages, model=model, disable_thinking=True, json_mode=True
         )
-        data = _parse_json(text)
+        data = _parse_json(result.text)
         if not data or not isinstance(data.get("tasks"), list):
             return None
         tasks: list[tuple[str, str]] = []
@@ -142,7 +142,7 @@ class Orchestrator:
             },
             {"role": "user", "content": question},
         ]
-        return self.client.chat_completion(messages, model=model, disable_thinking=True)
+        return self.client.chat_completion(messages, model=model, disable_thinking=True).text
 
     def _aggregate(
         self,
@@ -171,11 +171,11 @@ class Orchestrator:
             },
             {"role": "user", "content": user_content},
         ]
-        return self.client.chat_completion(messages, model=model, disable_thinking=True)
+        return self.client.chat_completion(messages, model=model, disable_thinking=True).text
 
     def _direct_answer(self, question: str, strategy: str, context: str, model: str) -> str:
         messages = [
             {"role": "system", "content": context},
             {"role": "user", "content": question},
         ]
-        return self.client.chat_completion(messages, model=model, disable_thinking=True)
+        return self.client.chat_completion(messages, model=model, disable_thinking=True).text

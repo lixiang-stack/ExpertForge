@@ -1,5 +1,5 @@
 from agent.config import AgentConfig, DomainConfig, IntentDef, StrategyDef
-from agent.llm import LLMError
+from agent.llm import ChatResult, LLMError
 from agent.repl import run_repl
 
 
@@ -30,7 +30,7 @@ class FakeClient:
     def chat_completion(
         self, messages, model=None, disable_thinking=False, json_mode=False, json_schema=None
     ):
-        return self.responses.pop(0)
+        return ChatResult(text=self.responses.pop(0), model=model or "m")
 
 
 def test_repl_answers(monkeypatch, capsys):

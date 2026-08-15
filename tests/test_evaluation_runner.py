@@ -39,10 +39,12 @@ def _config():
                        evaluation=EvaluationConfig(judge_model="judge-a"))
 
 
+from agent.llm import ChatResult
+
+
 class FakeClient:
     def __init__(self, responses, usage=None):
         self.responses = list(responses)
-        self._usage_local = __import__("threading").local()
         self.models = []
         self.json_modes = []
         self.usage_queue = list(usage or [])
@@ -51,22 +53,17 @@ class FakeClient:
                         disable_thinking=False, json_mode=False, json_schema=None):
         self.models.append(model)
         self.json_modes.append(json_mode)
+        prompt = completion = cached = 0
         if self.usage_queue:
-            self._set_usage(*self.usage_queue.pop(0))
-        return self.responses.pop(0)
-
-    def _set_usage(self, prompt, completion, cached=0):
-        class U:
-            pass
-        u = U()
-        u.prompt_tokens = prompt
-        u.completion_tokens = completion
-        u.total_tokens = prompt + completion
-        details = U()
-        details.cached_tokens = cached
-        u.prompt_tokens_details = details
-        self._usage_local.usage = u
-        self._usage_local.cache_tokens = cached
+            prompt, completion, cached = self.usage_queue.pop(0)
+        return ChatResult(
+            text=self.responses.pop(0),
+            model=model or "m",
+            prompt_tokens=prompt,
+            completion_tokens=completion,
+            total_tokens=prompt + completion,
+            cache_tokens=cached,
+        )
 
     def _record_usage(self, prompt, completion, cached=0):
         """Set the usage seen by the NEXT chat_completion call."""
@@ -77,7 +74,7 @@ def test_recording_client_records_usage_and_latency():
     inner = FakeClient(["hello"], usage=[(10, 5, 3)])
     rc = RecordingClient(inner)
     out = rc.chat_completion([{"role": "user", "content": "hi"}], model="m2")
-    assert out == "hello"
+    assert out.text == "hello"
     assert rc.calls[0]["model"] == "m2"
     assert rc.calls[0]["prompt_tokens"] == 10
     assert rc.calls[0]["completion_tokens"] == 5

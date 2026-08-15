@@ -1,8 +1,6 @@
-import threading
-
 import pytest
 
-from agent.llm import LLMError
+from agent.llm import ChatResult, LLMError
 from agent.observability.client import TracedLLMClient
 from agent.observability.tracing import TraceStore, current_phase, phase, trace_span
 
@@ -10,8 +8,7 @@ from agent.observability.tracing import TraceStore, current_phase, phase, trace_
 class FakeInner:
     def __init__(self, usage=None, error=None, model="m"):
         self.model = model
-        self._usage_local = threading.local()
-        self._usage_local.usage = usage
+        self._usage = usage
         self._error = error
         self.last_kwargs = None
 
@@ -19,7 +16,15 @@ class FakeInner:
         self.last_kwargs = (model, messages)
         if self._error:
             raise self._error
-        return "the answer"
+        u = self._usage
+        return ChatResult(
+            text="the answer",
+            model=model or self.model,
+            prompt_tokens=getattr(u, "prompt_tokens", 0) if u else 0,
+            completion_tokens=getattr(u, "completion_tokens", 0) if u else 0,
+            total_tokens=getattr(u, "total_tokens", 0) if u else 0,
+            cache_tokens=0,
+        )
 
     def chat_completion_stream(self, messages, **kwargs):
         for chunk in ["a", "b"]:
@@ -42,9 +47,9 @@ def test_records_ok_call_with_usage(tmp_path):
     inner = FakeInner(usage=_Usage(10, 5))
     traced = TracedLLMClient(inner, store)
     with trace_span() as tid, phase("classification"):
-        text = traced.chat_completion([{"role": "user", "content": "hi"}], model="low-a")
+        result = traced.chat_completion([{"role": "user", "content": "hi"}], model="low-a")
 
-    assert text == "the answer"
+    assert result.text == "the answer"
     assert inner.last_kwargs[0] == "low-a"
     calls = store.trace_llm_calls(tid)
     assert len(calls) == 1
@@ -72,14 +77,14 @@ def test_records_error_and_reraises(tmp_path):
     assert ev["prompt_tokens"] is None
 
 
-def test_records_non_streaming_usage_is_none_when_missing(tmp_path):
+def test_records_usage_zero_when_missing(tmp_path):
     store = _make_store(tmp_path)
     inner = FakeInner(usage=None)
     traced = TracedLLMClient(inner, store)
     with trace_span() as tid:
         traced.chat_completion([{"role": "user", "content": "hi"}])
     ev = store.trace_llm_calls(tid)[0]
-    assert ev["prompt_tokens"] is None
+    assert ev["prompt_tokens"] == 0
 
 
 def test_stream_delegates_without_recording(tmp_path):

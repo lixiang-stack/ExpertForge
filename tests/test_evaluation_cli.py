@@ -1,6 +1,7 @@
 import pytest
 
 from agent.evaluation import __main__ as eval_main
+from agent.llm import ChatResult
 
 
 def test_main_run_prints_summary_and_writes_file(tmp_path, monkeypatch):
@@ -51,7 +52,10 @@ def test_main_run_prints_summary_and_writes_file(tmp_path, monkeypatch):
         def chat_completion(self, messages, model=None, temperature=0.3,
                             disable_thinking=False, json_mode=False, json_schema=None):
             self._usage_local.usage = None
-            return '{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}'
+            return ChatResult(
+                text='{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}',
+                model=model or "m",
+            )
 
         def chat_completion_stream(self, messages, **kwargs):
             return iter([])
