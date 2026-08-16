@@ -138,6 +138,9 @@ def get_api_key() -> str:
 class IntentDef:
     id: str
     description: str
+    positive_examples: list[str] = field(default_factory=list)
+    negative_examples: list[str] = field(default_factory=list)
+    boundaries: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -183,6 +186,12 @@ def _read_yaml(path: Path) -> object:
         raise ConfigError(f"Invalid domain config YAML: {path}: {e}")
 
 
+def _str_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [v for v in value if isinstance(v, str)]
+
+
 def _read_prompt(path: Path) -> str:
     if not path.is_file():
         raise ConfigError(f"Prompt file not found: {path}")
@@ -214,6 +223,9 @@ def load_domain_config(domain_dir: str) -> DomainConfig:
         intents[iid] = IntentDef(
             id=iid,
             description=item.get("description") or "",
+            positive_examples=_str_list(item.get("positive_examples")),
+            negative_examples=_str_list(item.get("negative_examples")),
+            boundaries=_str_list(item.get("boundaries")),
         )
 
     mapping_data = _read_yaml(base / "intent_mapping.yaml")
