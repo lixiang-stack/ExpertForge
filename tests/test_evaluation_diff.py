@@ -48,6 +48,16 @@ def test_diff_handles_none_accuracy():
     assert "n/a" in text
 
 
+def test_diff_shows_per_complexity():
+    a = _run("a", 1.0, 0.5, 4.0, 100)
+    a["metrics"]["classification"]["per_complexity"] = {"simple": 1.0, "medium": 0.5}
+    b = _run("b", 1.0, 0.5, 4.0, 100)
+    b["metrics"]["classification"]["per_complexity"] = {"simple": 1.0, "medium": 1.0}
+    text = diff_runs(a, b)
+    assert "per_complexity" in text
+    assert "medium" in text
+
+
 def test_load_result_roundtrip(tmp_path):
     path = tmp_path / "run.json"
     path.write_text(json.dumps(_run("x", 1.0, 1.0, 5.0, 10)), encoding="utf-8")

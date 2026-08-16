@@ -294,6 +294,155 @@ def test_load_domain_config_bad_yaml(tmp_path):
         load_domain_config(str(base))
 
 
+from agent.config import ComplexityPolicy
+
+
+def test_load_domain_config_complexity_policy(tmp_path):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(
+        json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text("", encoding="utf-8")
+    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
+    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
+    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
+    (base / "complexity.yaml").write_text(
+        "- level: simple\n"
+        "  description: single concept\n"
+        "  dimensions:\n"
+        "    - 'Reasoning: single step'\n"
+        "    - 'Scope: single concept'\n"
+        "  positive_examples:\n"
+        "    - 'What is dependency injection?'\n"
+        "  negative_examples:\n"
+        "    - 'Design a distributed rate limiter'\n"
+        "  boundaries:\n"
+        "    - 'Prefer medium when multiple concepts'\n"
+        "- level: medium\n"
+        "  description: multiple concepts\n"
+        "- level: complex\n"
+        "  description: multiple subsystems\n",
+        encoding="utf-8",
+    )
+    domain = load_domain_config(str(base))
+    assert isinstance(domain.complexity, ComplexityPolicy)
+    assert [l.level for l in domain.complexity.levels] == ["simple", "medium", "complex"]
+    level = domain.complexity.levels[0]
+    assert level.level == "simple"
+    assert level.description == "single concept"
+    assert level.dimensions == ["Reasoning: single step", "Scope: single concept"]
+    assert level.positive_examples == ["What is dependency injection?"]
+    assert level.negative_examples == ["Design a distributed rate limiter"]
+    assert level.boundaries == ["Prefer medium when multiple concepts"]
+
+
+def test_load_domain_config_complexity_missing_is_none(tmp_path):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(
+        json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text("", encoding="utf-8")
+    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
+    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
+    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
+    domain = load_domain_config(str(base))
+    assert domain.complexity is None
+
+
+def test_load_domain_config_complexity_invalid_level(tmp_path):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(
+        json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text("", encoding="utf-8")
+    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
+    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
+    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
+    (base / "complexity.yaml").write_text("- level: bogus\n  description: d\n",
+                                          encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_domain_config(str(base))
+
+
+def test_load_domain_config_complexity_incomplete_levels_raises(tmp_path):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(
+        json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text("", encoding="utf-8")
+    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
+    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
+    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
+    (base / "complexity.yaml").write_text(
+        "- level: simple\n  description: d\n"
+        "- level: medium\n  description: d\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError):
+        load_domain_config(str(base))
+
+
+def test_load_domain_config_complexity_reordered_raises(tmp_path):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(
+        json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text("", encoding="utf-8")
+    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
+    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
+    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
+    (base / "complexity.yaml").write_text(
+        "- level: complex\n  description: d\n"
+        "- level: medium\n  description: d\n"
+        "- level: simple\n  description: d\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError):
+        load_domain_config(str(base))
+
+
+def test_load_domain_config_complexity_non_list_raises(tmp_path):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(
+        json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text("", encoding="utf-8")
+    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
+    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
+    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
+    (base / "complexity.yaml").write_text("not_a_list: true\n", encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_domain_config(str(base))
+
+
+def test_load_domain_config_complexity_missing_level_raises(tmp_path):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(
+        json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text("", encoding="utf-8")
+    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
+    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
+    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
+    (base / "complexity.yaml").write_text("- description: d\n", encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_domain_config(str(base))
+
+
 def test_load_domain_config_mapping_unknown_intent(tmp_path):
     base = tmp_path / "domain"
     (base / "prompts").mkdir(parents=True)

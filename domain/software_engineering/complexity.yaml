@@ -1,0 +1,44 @@
+- level: simple
+  description: Single clear concept, single fact, or simple code change; no obvious trade-off; no multi-step reasoning
+  dimensions:
+    - "Reasoning: single step, recalls one concept or fact"
+    - "Scope: one concept, one function, or one file"
+    - "Trade-off: none or negligible"
+    - "Coordination: none required"
+  positive_examples:
+    - "What is dependency injection?"
+    - "Walk me through the 12-factor app principles, one by one, in full detail."
+  negative_examples:
+    - "Design a distributed rate limiter for millions of QPS with multi-region deployment."
+    - "Compare mutex and RWMutex in Go."
+  boundaries:
+    - "Prefer medium over simple when the question connects multiple related concepts or requires reasoning across them."
+- level: medium
+  description: Multiple related concepts; requires some reasoning; bounded trade-offs; completable by one expert; no task decomposition
+  dimensions:
+    - "Reasoning: a few connected steps across related concepts"
+    - "Scope: a feature or a focused area of a system"
+    - "Trade-off: bounded, a few options with clear consequences"
+    - "Coordination: a single expert suffices"
+  positive_examples:
+    - "Compare mutex and RWMutex in Go."
+    - "Why does my API response time degrade as concurrent users increase?"
+  negative_examples:
+    - "What is dependency injection?"
+    - "Design a distributed rate limiter for millions of QPS with multi-region deployment."
+  boundaries:
+    - "Prefer complex over medium when the task spans multiple subsystems or needs task decomposition."
+- level: complex
+  description: Multiple subsystems; multiple constraints; architecture-level decision; multiple viable approaches; clear trade-offs; requires task decomposition; needs multiple independent analysis perspectives
+  dimensions:
+    - "Reasoning: multi-step reasoning across subsystems and constraints"
+    - "Scope: multiple subsystems or system-wide architecture"
+    - "Trade-off: significant, multiple viable approaches with real consequences"
+    - "Coordination: requires task decomposition or multiple analysis perspectives"
+  positive_examples:
+    - "Design a distributed rate limiter for millions of QPS with multi-region deployment."
+  negative_examples:
+    - "Walk me through the 12-factor app principles, one by one, in full detail."
+    - "What is dependency injection?"
+  boundaries:
+    - "Prefer complex when the question demands architecture-level decisions under multiple constraints."

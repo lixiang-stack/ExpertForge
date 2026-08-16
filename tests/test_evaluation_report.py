@@ -99,3 +99,9 @@ def test_format_summary_has_per_suite_section():
     text = format_summary(_record())
     assert "Per-suite" in text
     assert "direct" in text
+
+
+def test_format_summary_has_per_complexity():
+    text = format_summary(_record())
+    assert "per_complexity" in text
+    assert "simple:" in text

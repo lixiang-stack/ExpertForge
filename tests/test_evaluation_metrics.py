@@ -37,6 +37,22 @@ def test_accuracy_none_when_empty():
     assert _accuracy(3, 4) == 0.75
 
 
+def test_per_complexity_accuracy():
+    cases = [_case("a", complexity="simple"), _case("b", complexity="medium"),
+             _case("c", complexity="complex")]
+    results = [
+        _result(cases[0], complexity="simple"),
+        _result(cases[1], complexity="complex"),  # wrong
+        _result(cases[2], complexity="complex"),
+    ]
+    m = _m(cases, results)
+    pc = m["classification"]["per_complexity"]
+    assert pc["simple"] == 1.0
+    assert pc["medium"] == 0.0
+    assert pc["complex"] == 1.0
+    assert list(pc) == ["simple", "medium", "complex"]
+
+
 def test_perfect_classification_and_routing():
     cases = [_case("a"), _case("b")]
     results = [_result(cases[0]), _result(cases[1])]

@@ -204,3 +204,12 @@ def test_load_suites_single_file(tmp_path):
     assert len(suites) == 1
     assert suites[0].name == "direct"
     assert suites[0].domain == "software_engineering"
+
+
+def test_complexity_boundary_cases_present():
+    suites = load_suites("evaluation/datasets/software_engineering")
+    cases = {c.id: c for s in suites for c in s.cases}
+    assert cases["se-127"].expected_complexity == "simple"
+    assert cases["se-128"].expected_complexity == "complex"
+    assert "12-factor" in cases["se-127"].question
+    assert "distributed rate limiter" in cases["se-128"].question

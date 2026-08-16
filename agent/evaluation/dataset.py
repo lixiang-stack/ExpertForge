@@ -5,7 +5,8 @@ from pathlib import Path
 
 import yaml
 
-COMPLEXITY_LEVELS = ("simple", "medium", "complex")
+from agent.config import COMPLEXITY_LEVELS
+
 OUT_OF_DOMAIN = "other"
 REJECT_STRATEGY = "reject"
 
