@@ -35,3 +35,11 @@ cases:
     question: "Design the architecture of a system that must handle millions of events per second."
     expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: analysis, orchestrate: true}
     answer_quality: true
+  - id: se-127
+    question: "Walk me through the 12-factor app principles, one by one, in full detail."
+    expected: {domain: software_engineering, intent: concept_explain, complexity: simple, strategy: teaching, orchestrate: false}
+    answer_quality: true
+  - id: se-128
+    question: "Design a distributed rate limiter for millions of QPS with multi-region deployment."
+    expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: analysis, orchestrate: true}
+    answer_quality: true

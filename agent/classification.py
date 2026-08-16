@@ -4,10 +4,8 @@ import json
 import re
 from dataclasses import dataclass
 
-from .config import DomainConfig, IntentDef
+from .config import COMPLEXITY_LEVELS, ComplexityPolicy, DomainConfig, IntentDef
 from .llm import LLMClient, LLMError
-
-COMPLEXITY_LEVELS = ("simple", "medium", "complex")
 
 
 @dataclass
@@ -46,9 +44,8 @@ Rules:
 - If in_domain is false, set intent and complexity to null.
 - If in_domain is true, choose the single intent that best matches the user's goal
   from the listed intents. Do not invent a new intent.
-- Also judge task complexity as one of {complexity_levels}:
-  simple (short direct answer), medium (needs structured explanation),
-  complex (large scope, multiple steps or subsystems).
+- Also judge task complexity as one of:
+  {complexity_section}
 - Output ONLY a single JSON object and nothing else.
 - JSON format: {{"in_domain": true|false, "intent": "<intent id or null>", "complexity": "<simple|medium|complex or null>", "reason": "one-sentence justification"}}
 
@@ -56,11 +53,35 @@ User question: {question}
 """
 
 
+def build_complexity_section(policy: ComplexityPolicy | None) -> str:
+    if policy is None:
+        return (
+            "simple (short direct answer), medium (needs structured explanation), "
+            "complex (large scope, multiple steps or subsystems)"
+        )
+    blocks: list[str] = []
+    for level in policy.levels:
+        lines = [f"- {level.level}: {level.description}"]
+        for dim in level.dimensions:
+            lines.append(f"  {dim}")
+        if level.positive_examples:
+            lines.append("  Positive examples:")
+            lines.extend(f"    - {ex}" for ex in level.positive_examples)
+        if level.negative_examples:
+            lines.append("  Negative examples:")
+            lines.extend(f"    - {ex}" for ex in level.negative_examples)
+        for b in level.boundaries:
+            lines.append(f"  Boundary: {b}")
+        blocks.append("\n".join(lines))
+    return "\n".join(blocks)
+
+
 def build_classification_prompt(
     name: str,
     description: str,
     intents: list[IntentDef],
     question: str,
+    complexity: ComplexityPolicy | None = None,
 ) -> str:
     lines: list[str] = []
     for idef in intents:
@@ -82,7 +103,7 @@ def build_classification_prompt(
         name=name,
         description=description,
         intents=intents_block,
-        complexity_levels=", ".join(COMPLEXITY_LEVELS),
+        complexity_section=build_complexity_section(complexity),
         question=question,
     )
 
@@ -147,7 +168,9 @@ class ClassificationService:
         intent_ids = list(self.domain.intents)
         schema = build_classification_schema(intent_ids)
         prompt = build_classification_prompt(
-            self.domain.name, self.domain.description, list(self.domain.intents.values()), question
+            self.domain.name, self.domain.description,
+            list(self.domain.intents.values()), question,
+            complexity=self.domain.complexity,
         )
         messages = [{"role": "system", "content": prompt}]
         # TODO: prefer json_schema structured output once the model/provider supports it.

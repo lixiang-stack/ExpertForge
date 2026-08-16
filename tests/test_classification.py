@@ -6,7 +6,7 @@ from agent.classification import (
     build_classification_schema,
     validate_classification,
 )
-from agent.config import DomainConfig, IntentDef
+from agent.config import ComplexityLevelDef, ComplexityPolicy, DomainConfig, IntentDef
 from agent.llm import ChatResult, LLMError
 
 
@@ -156,7 +156,7 @@ def test_classify_api_failure_propagates():
         ClassificationService(AlwaysFailingClient(), _domain()).classify("q")
 
 
-from agent.classification import build_classification_prompt
+from agent.classification import build_classification_prompt, build_complexity_section
 
 
 def _rich_intent():
@@ -193,3 +193,63 @@ def test_build_classification_prompt_omits_empty_sections():
     assert "Positive examples" not in prompt
     assert "Negative examples" not in prompt
     assert "Boundary:" not in prompt
+
+
+def _complexity_policy():
+    return ComplexityPolicy(levels=[
+        ComplexityLevelDef(
+            level="simple",
+            description="single clear concept, single fact",
+            dimensions=["Reasoning: single step", "Scope: single concept",
+                        "Trade-off: none", "Coordination: none"],
+            positive_examples=["What is dependency injection?"],
+            negative_examples=["Design a distributed rate limiter"],
+            boundaries=["Prefer medium over simple when multiple concepts"],
+        ),
+        ComplexityLevelDef(
+            level="complex",
+            description="multiple subsystems, multiple constraints",
+            dimensions=["Reasoning: multi-step", "Scope: multiple subsystems"],
+            positive_examples=["Design a distributed rate limiter for millions of QPS"],
+            negative_examples=["What is dependency injection?"],
+            boundaries=["Prefer complex when task decomposition is required"],
+        ),
+    ])
+
+
+def test_build_complexity_section_renders_levels():
+    section = build_complexity_section(_complexity_policy())
+    assert "simple: single clear concept, single fact" in section
+    assert "Reasoning: single step" in section
+    assert "Trade-off: none" in section
+    assert "What is dependency injection?" in section
+    assert "Design a distributed rate limiter" in section
+    assert "Boundary: Prefer medium over simple when multiple concepts" in section
+    assert "complex: multiple subsystems, multiple constraints" in section
+
+
+def test_build_complexity_section_none_renders_default():
+    section = build_complexity_section(None)
+    assert "short direct answer" in section
+
+
+def test_build_classification_prompt_renders_complexity_policy():
+    prompt = build_classification_prompt(
+        "SE", "software engineering",
+        [IntentDef("faq", "quick factual question")],
+        "what is a hash?",
+        complexity=_complexity_policy(),
+    )
+    assert "single clear concept, single fact" in prompt
+    assert "Design a distributed rate limiter for millions of QPS" in prompt
+
+
+def test_classify_passes_domain_complexity_to_prompt():
+    domain = _domain()
+    domain.complexity = _complexity_policy()
+    client = FakeClient([
+        '{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}',
+    ])
+    ClassificationService(client, domain).classify("q")
+    messages, model, disable_thinking, json_mode, json_schema = client.calls[0]
+    assert "single clear concept, single fact" in messages[0]["content"]

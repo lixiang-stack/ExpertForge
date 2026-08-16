@@ -1,6 +1,6 @@
 {
   "domain": "software_engineering",
-  "label": "feat_intent_taxonomy",
+  "label": "feat_complexity_classification",
   "model": "deepseek-v4-flash",
   "judge_model": "deepseek-v4-pro",
   "skip_quality": false,
@@ -16,71 +16,76 @@
     "teaching"
   ],
   "metrics": {
-    "n_cases": 28,
+    "n_cases": 30,
     "classification": {
       "domain_accuracy": 1.0,
-      "intent_accuracy": 0.963,
-      "complexity_accuracy": 0.7778,
+      "intent_accuracy": 0.9655,
+      "complexity_accuracy": 0.8621,
       "per_intent": {
         "performance_analysis": 1.0,
         "architecture_design": 1.0,
         "comparison": 1.0,
         "faq": 1.0,
         "troubleshooting": 1.0,
-        "concept_explain": 0.5,
+        "concept_explain": 0.6667,
         "tutorial": 1.0,
         "learning_guide": 1.0,
         "generate_code": 1.0,
         "summarization": 1.0,
         "code_review": 1.0
+      },
+      "per_complexity": {
+        "medium": 0.8571,
+        "simple": 0.9,
+        "complex": 0.8
       }
     },
     "routing": {
-      "strategy_accuracy": 0.9643,
-      "orchestration_accuracy": 0.8571,
+      "strategy_accuracy": 1.0,
+      "orchestration_accuracy": 0.9667,
       "model_routing_accuracy": 1.0
     },
     "answer_quality": {
-      "correctness": 4.92,
+      "correctness": 4.96,
       "relevance": 5.0,
-      "completeness": 4.92,
-      "technical_depth": 4.62,
+      "completeness": 4.96,
+      "technical_depth": 4.79,
       "practical_usefulness": 5.0,
-      "hallucination": 4.96
+      "hallucination": 5.0
     },
     "cost": {
       "by_path": {
         "medium": {
-          "llm_calls": 58,
-          "in_tokens": 78783,
-          "out_tokens": 65617,
-          "total_tokens": 144400,
-          "cache_tokens": 18432,
-          "latency_ms": 646812.7
+          "llm_calls": 42,
+          "in_tokens": 59271,
+          "out_tokens": 46874,
+          "total_tokens": 106145,
+          "cache_tokens": 23424,
+          "latency_ms": 493282.1
         },
         "simple": {
-          "llm_calls": 25,
-          "in_tokens": 21341,
-          "out_tokens": 7971,
-          "total_tokens": 29312,
-          "cache_tokens": 12544,
-          "latency_ms": 91130.7
+          "llm_calls": 28,
+          "in_tokens": 33509,
+          "out_tokens": 17953,
+          "total_tokens": 51462,
+          "cache_tokens": 17792,
+          "latency_ms": 189476.8
         },
         "complex": {
-          "llm_calls": 26,
-          "in_tokens": 43205,
-          "out_tokens": 35484,
-          "total_tokens": 78689,
-          "cache_tokens": 5632,
-          "latency_ms": 298415.3
+          "llm_calls": 33,
+          "in_tokens": 59984,
+          "out_tokens": 56193,
+          "total_tokens": 116177,
+          "cache_tokens": 8960,
+          "latency_ms": 440258.6
         }
       },
-      "llm_calls": 110,
-      "in_tokens": 144670,
-      "out_tokens": 109111,
-      "total_tokens": 253781,
-      "cache_tokens": 37888,
-      "latency_ms": 1037139.7
+      "llm_calls": 104,
+      "in_tokens": 154524,
+      "out_tokens": 121059,
+      "total_tokens": 275583,
+      "cache_tokens": 51840,
+      "latency_ms": 1123718.3
     }
   },
   "metrics_by_suite": {
@@ -89,16 +94,20 @@
       "classification": {
         "domain_accuracy": 1.0,
         "intent_accuracy": 1.0,
-        "complexity_accuracy": 0.3333,
+        "complexity_accuracy": 0.6667,
         "per_intent": {
           "performance_analysis": 1.0,
           "architecture_design": 1.0,
           "comparison": 1.0
+        },
+        "per_complexity": {
+          "medium": 1.0,
+          "simple": 0.0
         }
       },
       "routing": {
         "strategy_accuracy": 1.0,
-        "orchestration_accuracy": 0.6667,
+        "orchestration_accuracy": 1.0,
         "model_routing_accuracy": 1.0
       },
       "answer_quality": {
@@ -112,93 +121,98 @@
       "cost": {
         "by_path": {
           "medium": {
-            "llm_calls": 10,
-            "in_tokens": 14697,
-            "out_tokens": 15765,
-            "total_tokens": 30462,
-            "cache_tokens": 1536,
-            "latency_ms": 149979.1
+            "llm_calls": 6,
+            "in_tokens": 7661,
+            "out_tokens": 4616,
+            "total_tokens": 12277,
+            "cache_tokens": 1920,
+            "latency_ms": 48872.9
           },
           "simple": {
             "llm_calls": 3,
-            "in_tokens": 3177,
-            "out_tokens": 1932,
-            "total_tokens": 5109,
-            "cache_tokens": 1408,
-            "latency_ms": 22474.4
+            "in_tokens": 3858,
+            "out_tokens": 3488,
+            "total_tokens": 7346,
+            "cache_tokens": 1792,
+            "latency_ms": 38427.1
           }
         },
-        "llm_calls": 13,
-        "in_tokens": 17874,
-        "out_tokens": 17697,
-        "total_tokens": 35571,
-        "cache_tokens": 2944,
-        "latency_ms": 172453.5
+        "llm_calls": 9,
+        "in_tokens": 11519,
+        "out_tokens": 8104,
+        "total_tokens": 19623,
+        "cache_tokens": 3712,
+        "latency_ms": 87300.0
       }
     },
     "classification": {
-      "n_cases": 9,
+      "n_cases": 11,
       "classification": {
         "domain_accuracy": 1.0,
-        "intent_accuracy": 1.0,
-        "complexity_accuracy": 0.75,
+        "intent_accuracy": 0.9,
+        "complexity_accuracy": 0.8,
         "per_intent": {
           "faq": 1.0,
           "troubleshooting": 1.0,
-          "concept_explain": 1.0,
+          "concept_explain": 0.5,
           "tutorial": 1.0,
           "learning_guide": 1.0,
           "performance_analysis": 1.0,
           "comparison": 1.0,
           "architecture_design": 1.0
+        },
+        "per_complexity": {
+          "simple": 1.0,
+          "medium": 0.6667,
+          "complex": 1.0
         }
       },
       "routing": {
         "strategy_accuracy": 1.0,
-        "orchestration_accuracy": 0.8889,
+        "orchestration_accuracy": 1.0,
         "model_routing_accuracy": 1.0
       },
       "answer_quality": {
-        "correctness": 4.88,
+        "correctness": 5.0,
         "relevance": 5.0,
-        "completeness": 4.88,
-        "technical_depth": 4.62,
+        "completeness": 5.0,
+        "technical_depth": 4.9,
         "practical_usefulness": 5.0,
         "hallucination": 5.0
       },
       "cost": {
         "by_path": {
           "simple": {
-            "llm_calls": 3,
-            "in_tokens": 2599,
-            "out_tokens": 1068,
-            "total_tokens": 3667,
-            "cache_tokens": 1408,
-            "latency_ms": 11675.5
+            "llm_calls": 6,
+            "in_tokens": 9614,
+            "out_tokens": 5889,
+            "total_tokens": 15503,
+            "cache_tokens": 3584,
+            "latency_ms": 61159.7
           },
           "medium": {
-            "llm_calls": 22,
-            "in_tokens": 28174,
-            "out_tokens": 22426,
-            "total_tokens": 50600,
-            "cache_tokens": 8448,
-            "latency_ms": 236818.4
+            "llm_calls": 18,
+            "in_tokens": 24057,
+            "out_tokens": 15750,
+            "total_tokens": 39807,
+            "cache_tokens": 10752,
+            "latency_ms": 155481.2
           },
           "complex": {
-            "llm_calls": 8,
-            "in_tokens": 13392,
-            "out_tokens": 11241,
-            "total_tokens": 24633,
-            "cache_tokens": 1408,
-            "latency_ms": 105468.6
+            "llm_calls": 16,
+            "in_tokens": 30228,
+            "out_tokens": 25085,
+            "total_tokens": 55313,
+            "cache_tokens": 3584,
+            "latency_ms": 212671.6
           }
         },
-        "llm_calls": 34,
-        "in_tokens": 45506,
-        "out_tokens": 34774,
-        "total_tokens": 80280,
-        "cache_tokens": 12544,
-        "latency_ms": 354743.5
+        "llm_calls": 41,
+        "in_tokens": 65659,
+        "out_tokens": 46763,
+        "total_tokens": 112422,
+        "cache_tokens": 19584,
+        "latency_ms": 430013.3
       }
     },
     "code_snippet": {
@@ -209,6 +223,10 @@
         "complexity_accuracy": 1.0,
         "per_intent": {
           "generate_code": 1.0
+        },
+        "per_complexity": {
+          "simple": 1.0,
+          "medium": 1.0
         }
       },
       "routing": {
@@ -220,7 +238,7 @@
         "correctness": 5.0,
         "relevance": 5.0,
         "completeness": 5.0,
-        "technical_depth": 4.0,
+        "technical_depth": 4.5,
         "practical_usefulness": 5.0,
         "hallucination": 5.0
       },
@@ -228,27 +246,27 @@
         "by_path": {
           "simple": {
             "llm_calls": 3,
-            "in_tokens": 2292,
-            "out_tokens": 721,
-            "total_tokens": 3013,
-            "cache_tokens": 1408,
-            "latency_ms": 7724.3
+            "in_tokens": 2844,
+            "out_tokens": 865,
+            "total_tokens": 3709,
+            "cache_tokens": 1792,
+            "latency_ms": 9185.1
           },
           "medium": {
             "llm_calls": 3,
-            "in_tokens": 3057,
-            "out_tokens": 2160,
-            "total_tokens": 5217,
-            "cache_tokens": 1408,
-            "latency_ms": 19833.9
+            "in_tokens": 3127,
+            "out_tokens": 6055,
+            "total_tokens": 9182,
+            "cache_tokens": 1792,
+            "latency_ms": 109051.4
           }
         },
         "llm_calls": 6,
-        "in_tokens": 5349,
-        "out_tokens": 2881,
-        "total_tokens": 8230,
-        "cache_tokens": 2816,
-        "latency_ms": 27558.2
+        "in_tokens": 5971,
+        "out_tokens": 6920,
+        "total_tokens": 12891,
+        "cache_tokens": 3584,
+        "latency_ms": 118236.5
       }
     },
     "debugging": {
@@ -259,6 +277,10 @@
         "complexity_accuracy": 1.0,
         "per_intent": {
           "troubleshooting": 1.0
+        },
+        "per_complexity": {
+          "simple": 1.0,
+          "medium": 1.0
         }
       },
       "routing": {
@@ -278,27 +300,27 @@
         "by_path": {
           "simple": {
             "llm_calls": 3,
-            "in_tokens": 3161,
-            "out_tokens": 1560,
-            "total_tokens": 4721,
-            "cache_tokens": 1408,
-            "latency_ms": 15911.9
+            "in_tokens": 3582,
+            "out_tokens": 3334,
+            "total_tokens": 6916,
+            "cache_tokens": 1792,
+            "latency_ms": 33132.8
           },
           "medium": {
             "llm_calls": 3,
-            "in_tokens": 3760,
-            "out_tokens": 2311,
-            "total_tokens": 6071,
-            "cache_tokens": 1408,
-            "latency_ms": 25718.1
+            "in_tokens": 4094,
+            "out_tokens": 2092,
+            "total_tokens": 6186,
+            "cache_tokens": 1792,
+            "latency_ms": 21731.2
           }
         },
         "llm_calls": 6,
-        "in_tokens": 6921,
-        "out_tokens": 3871,
-        "total_tokens": 10792,
-        "cache_tokens": 2816,
-        "latency_ms": 41630.0
+        "in_tokens": 7676,
+        "out_tokens": 5426,
+        "total_tokens": 13102,
+        "cache_tokens": 3584,
+        "latency_ms": 54864.0
       }
     },
     "direct": {
@@ -310,6 +332,9 @@
         "per_intent": {
           "faq": 1.0,
           "summarization": 1.0
+        },
+        "per_complexity": {
+          "simple": 1.0
         }
       },
       "routing": {
@@ -320,7 +345,7 @@
       "answer_quality": {
         "correctness": 5.0,
         "relevance": 5.0,
-        "completeness": 4.5,
+        "completeness": 5.0,
         "technical_depth": 4.5,
         "practical_usefulness": 5.0,
         "hallucination": 5.0
@@ -329,19 +354,19 @@
         "by_path": {
           "simple": {
             "llm_calls": 7,
-            "in_tokens": 5360,
-            "out_tokens": 921,
-            "total_tokens": 6281,
-            "cache_tokens": 4096,
-            "latency_ms": 11910.7
+            "in_tokens": 6663,
+            "out_tokens": 953,
+            "total_tokens": 7616,
+            "cache_tokens": 5248,
+            "latency_ms": 13055.7
           }
         },
         "llm_calls": 7,
-        "in_tokens": 5360,
-        "out_tokens": 921,
-        "total_tokens": 6281,
-        "cache_tokens": 4096,
-        "latency_ms": 11910.7
+        "in_tokens": 6663,
+        "out_tokens": 953,
+        "total_tokens": 7616,
+        "cache_tokens": 5248,
+        "latency_ms": 13055.7
       }
     },
     "orchestration": {
@@ -349,11 +374,62 @@
       "classification": {
         "domain_accuracy": 1.0,
         "intent_accuracy": 1.0,
-        "complexity_accuracy": 1.0,
+        "complexity_accuracy": 0.6667,
         "per_intent": {
           "troubleshooting": 1.0,
           "architecture_design": 1.0,
           "generate_code": 1.0
+        },
+        "per_complexity": {
+          "complex": 0.6667
+        }
+      },
+      "routing": {
+        "strategy_accuracy": 1.0,
+        "orchestration_accuracy": 0.6667,
+        "model_routing_accuracy": 1.0
+      },
+      "answer_quality": {
+        "correctness": 4.67,
+        "relevance": 5.0,
+        "completeness": 4.67,
+        "technical_depth": 4.67,
+        "practical_usefulness": 5.0,
+        "hallucination": 5.0
+      },
+      "cost": {
+        "by_path": {
+          "complex": {
+            "llm_calls": 17,
+            "in_tokens": 29756,
+            "out_tokens": 31108,
+            "total_tokens": 60864,
+            "cache_tokens": 5376,
+            "latency_ms": 227587.0
+          }
+        },
+        "llm_calls": 17,
+        "in_tokens": 29756,
+        "out_tokens": 31108,
+        "total_tokens": 60864,
+        "cache_tokens": 5376,
+        "latency_ms": 227587.0
+      }
+    },
+    "routing": {
+      "n_cases": 3,
+      "classification": {
+        "domain_accuracy": 1.0,
+        "intent_accuracy": 1.0,
+        "complexity_accuracy": 1.0,
+        "per_intent": {
+          "troubleshooting": 1.0,
+          "performance_analysis": 1.0,
+          "code_review": 1.0
+        },
+        "per_complexity": {
+          "medium": 1.0,
+          "simple": 1.0
         }
       },
       "routing": {
@@ -362,50 +438,6 @@
         "model_routing_accuracy": 1.0
       },
       "answer_quality": {
-        "correctness": 4.67,
-        "relevance": 5.0,
-        "completeness": 5.0,
-        "technical_depth": 4.33,
-        "practical_usefulness": 5.0,
-        "hallucination": 4.67
-      },
-      "cost": {
-        "by_path": {
-          "complex": {
-            "llm_calls": 18,
-            "in_tokens": 29813,
-            "out_tokens": 24243,
-            "total_tokens": 54056,
-            "cache_tokens": 4224,
-            "latency_ms": 192946.7
-          }
-        },
-        "llm_calls": 18,
-        "in_tokens": 29813,
-        "out_tokens": 24243,
-        "total_tokens": 54056,
-        "cache_tokens": 4224,
-        "latency_ms": 192946.7
-      }
-    },
-    "routing": {
-      "n_cases": 3,
-      "classification": {
-        "domain_accuracy": 1.0,
-        "intent_accuracy": 1.0,
-        "complexity_accuracy": 0.6667,
-        "per_intent": {
-          "troubleshooting": 1.0,
-          "performance_analysis": 1.0,
-          "code_review": 1.0
-        }
-      },
-      "routing": {
-        "strategy_accuracy": 1.0,
-        "orchestration_accuracy": 0.6667,
-        "model_routing_accuracy": 1.0
-      },
-      "answer_quality": {
         "correctness": 5.0,
         "relevance": 5.0,
         "completeness": 5.0,
@@ -416,45 +448,49 @@
       "cost": {
         "by_path": {
           "medium": {
-            "llm_calls": 10,
-            "in_tokens": 13609,
-            "out_tokens": 9961,
-            "total_tokens": 23570,
-            "cache_tokens": 2816,
-            "latency_ms": 102171.7
+            "llm_calls": 6,
+            "in_tokens": 7994,
+            "out_tokens": 4385,
+            "total_tokens": 12379,
+            "cache_tokens": 3584,
+            "latency_ms": 47925.9
           },
           "simple": {
             "llm_calls": 3,
-            "in_tokens": 2387,
-            "out_tokens": 937,
-            "total_tokens": 3324,
-            "cache_tokens": 1408,
-            "latency_ms": 11094.2
+            "in_tokens": 2871,
+            "out_tokens": 1029,
+            "total_tokens": 3900,
+            "cache_tokens": 1792,
+            "latency_ms": 10749.5
           }
         },
-        "llm_calls": 13,
-        "in_tokens": 15996,
-        "out_tokens": 10898,
-        "total_tokens": 26894,
-        "cache_tokens": 4224,
-        "latency_ms": 113265.9
+        "llm_calls": 9,
+        "in_tokens": 10865,
+        "out_tokens": 5414,
+        "total_tokens": 16279,
+        "cache_tokens": 5376,
+        "latency_ms": 58675.4
       }
     },
     "teaching": {
       "n_cases": 3,
       "classification": {
         "domain_accuracy": 1.0,
-        "intent_accuracy": 0.6667,
-        "complexity_accuracy": 0.6667,
+        "intent_accuracy": 1.0,
+        "complexity_accuracy": 1.0,
         "per_intent": {
-          "concept_explain": 0.0,
+          "concept_explain": 1.0,
           "tutorial": 1.0,
           "learning_guide": 1.0
+        },
+        "per_complexity": {
+          "simple": 1.0,
+          "medium": 1.0
         }
       },
       "routing": {
-        "strategy_accuracy": 0.6667,
-        "orchestration_accuracy": 0.6667,
+        "strategy_accuracy": 1.0,
+        "orchestration_accuracy": 1.0,
         "model_routing_accuracy": 1.0
       },
       "answer_quality": {
@@ -469,27 +505,27 @@
         "by_path": {
           "simple": {
             "llm_calls": 3,
-            "in_tokens": 2365,
-            "out_tokens": 832,
-            "total_tokens": 3197,
-            "cache_tokens": 1408,
-            "latency_ms": 10339.7
+            "in_tokens": 4077,
+            "out_tokens": 2395,
+            "total_tokens": 6472,
+            "cache_tokens": 1792,
+            "latency_ms": 23766.9
           },
           "medium": {
-            "llm_calls": 10,
-            "in_tokens": 15486,
-            "out_tokens": 12994,
-            "total_tokens": 28480,
-            "cache_tokens": 2816,
-            "latency_ms": 112291.5
+            "llm_calls": 6,
+            "in_tokens": 12338,
+            "out_tokens": 13976,
+            "total_tokens": 26314,
+            "cache_tokens": 3584,
+            "latency_ms": 110219.5
           }
         },
-        "llm_calls": 13,
-        "in_tokens": 17851,
-        "out_tokens": 13826,
-        "total_tokens": 31677,
-        "cache_tokens": 4224,
-        "latency_ms": 122631.2
+        "llm_calls": 9,
+        "in_tokens": 16415,
+        "out_tokens": 16371,
+        "total_tokens": 32786,
+        "cache_tokens": 5376,
+        "latency_ms": 133986.4
       }
     }
   }

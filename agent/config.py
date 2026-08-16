@@ -15,6 +15,8 @@ class ConfigError(Exception):
 DEFAULT_CONFIG_PATH = "config.json"
 DEFAULT_EXAMPLE_CONFIG_PATH = "config.example.json"
 
+COMPLEXITY_LEVELS = ("simple", "medium", "complex")
+
 
 @dataclass
 class ObservabilityConfig:
@@ -144,6 +146,21 @@ class IntentDef:
 
 
 @dataclass
+class ComplexityLevelDef:
+    level: str
+    description: str
+    dimensions: list[str] = field(default_factory=list)
+    positive_examples: list[str] = field(default_factory=list)
+    negative_examples: list[str] = field(default_factory=list)
+    boundaries: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ComplexityPolicy:
+    levels: list[ComplexityLevelDef]
+
+
+@dataclass
 class StrategyDef:
     id: str
     model: str | None = None
@@ -161,6 +178,7 @@ class DomainConfig:
     strategies: dict[str, StrategyDef]
     default_strategy: str
     prompts: dict[str, str]
+    complexity: ComplexityPolicy | None = None
 
 
 def _read_json(path: Path) -> dict:
@@ -227,6 +245,39 @@ def load_domain_config(domain_dir: str) -> DomainConfig:
             negative_examples=_str_list(item.get("negative_examples")),
             boundaries=_str_list(item.get("boundaries")),
         )
+
+    complexity = None
+    complexity_path = base / "complexity.yaml"
+    if complexity_path.is_file():
+        complexity_data = _read_yaml(complexity_path)
+        if not isinstance(complexity_data, list):
+            raise ConfigError(
+                f"complexity.yaml must contain a list: {complexity_path}"
+            )
+        levels: list[ComplexityLevelDef] = []
+        for item in complexity_data:
+            if not isinstance(item, dict) or not isinstance(item.get("level"), str):
+                raise ConfigError(
+                    f"Invalid complexity level entry in {complexity_path}: {item}"
+                )
+            if item["level"] not in COMPLEXITY_LEVELS:
+                raise ConfigError(
+                    f"Unknown complexity level {item['level']!r} in {complexity_path}"
+                )
+            levels.append(ComplexityLevelDef(
+                level=item["level"],
+                description=item.get("description") or "",
+                dimensions=_str_list(item.get("dimensions")),
+                positive_examples=_str_list(item.get("positive_examples")),
+                negative_examples=_str_list(item.get("negative_examples")),
+                boundaries=_str_list(item.get("boundaries")),
+            ))
+        if [l.level for l in levels] != list(COMPLEXITY_LEVELS):
+            raise ConfigError(
+                f"complexity.yaml must define each level exactly once in order "
+                f"simple, medium, complex: {complexity_path}"
+            )
+        complexity = ComplexityPolicy(levels=levels)
 
     mapping_data = _read_yaml(base / "intent_mapping.yaml")
     if mapping_data is None:
@@ -297,4 +348,5 @@ def load_domain_config(domain_dir: str) -> DomainConfig:
         strategies=strategies,
         default_strategy=configured_default,
         prompts=prompts,
+        complexity=complexity,
     )

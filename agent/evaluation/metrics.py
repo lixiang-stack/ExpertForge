@@ -36,6 +36,8 @@ def compute_metrics(suite: Suite, results: list[CaseResult]) -> dict:
     model_correct = 0
     per_intent: dict[str, list[bool]] = {}
     per_intent_order: list[str] = []
+    per_complexity: dict[str, list[bool]] = {}
+    per_complexity_order: list[str] = []
     judged: list[dict] = []
     total_cost = _zero_cost()
     by_path: dict[str, dict] = {}
@@ -63,8 +65,15 @@ def compute_metrics(suite: Suite, results: list[CaseResult]) -> dict:
             if c.expected_intent not in per_intent_order:
                 per_intent_order.append(c.expected_intent)
             complexity_total += 1
-            if r.complexity == c.expected_complexity:
+            complexity_ok = r.complexity == c.expected_complexity
+            if complexity_ok:
                 complexity_correct += 1
+            if complexity_ok:
+                per_complexity.setdefault(c.expected_complexity, []).append(True)
+            else:
+                per_complexity.setdefault(c.expected_complexity, []).append(False)
+            if c.expected_complexity not in per_complexity_order:
+                per_complexity_order.append(c.expected_complexity)
             path = c.expected_complexity
             if path not in by_path:
                 by_path[path] = _zero_cost()
@@ -82,6 +91,11 @@ def compute_metrics(suite: Suite, results: list[CaseResult]) -> dict:
         marks = per_intent[iid]
         per_intent_accuracy[iid] = _accuracy(sum(marks), len(marks))
 
+    per_complexity_accuracy = {}
+    for level in per_complexity_order:
+        marks = per_complexity[level]
+        per_complexity_accuracy[level] = _accuracy(sum(marks), len(marks))
+
     answer_quality = {}
     if judged:
         for dim in JUDGE_DIMENSIONS:
@@ -96,6 +110,7 @@ def compute_metrics(suite: Suite, results: list[CaseResult]) -> dict:
             "intent_accuracy": _accuracy(intent_correct, intent_total),
             "complexity_accuracy": _accuracy(complexity_correct, complexity_total),
             "per_intent": per_intent_accuracy,
+            "per_complexity": per_complexity_accuracy,
         },
         "routing": {
             "strategy_accuracy": _accuracy(strategy_correct, n),

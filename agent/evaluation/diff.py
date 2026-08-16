@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+from agent.config import COMPLEXITY_LEVELS
+
 
 def load_result(path: str) -> dict:
     with open(path, encoding="utf-8") as f:
@@ -36,6 +38,12 @@ def diff_runs(record_a: dict, record_b: dict) -> str:
     clsb = mb["classification"]
     for key in ("domain_accuracy", "intent_accuracy", "complexity_accuracy"):
         lines.append(f"  {key}: {_diff_value(clsa[key], clsb[key])}")
+    pca = clsa.get("per_complexity") or {}
+    pcb = clsb.get("per_complexity") or {}
+    if pca or pcb:
+        lines.append("  per_complexity:")
+        for level in sorted(set(pca) | set(pcb), key=COMPLEXITY_LEVELS.index):
+            lines.append(f"    {level}: {_diff_value(pca.get(level), pcb.get(level))}")
     lines += ["", "Routing:"]
     ra = ma["routing"]
     rb = mb["routing"]

@@ -120,6 +120,10 @@ def format_summary(record: dict) -> str:
         lines.append("  per_intent:")
         for iid, acc in cls["per_intent"].items():
             lines.append(f"    {iid}: {_fmt_accuracy(acc)}")
+    if cls.get("per_complexity") or {}:
+        lines.append("  per_complexity:")
+        for level, acc in cls["per_complexity"].items():
+            lines.append(f"    {level}: {_fmt_accuracy(acc)}")
     lines += [
         "",
         "Routing:",
