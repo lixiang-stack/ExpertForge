@@ -154,3 +154,42 @@ def test_classify_api_failure_propagates():
 
     with pytest.raises(LLMError):
         ClassificationService(AlwaysFailingClient(), _domain()).classify("q")
+
+
+from agent.classification import build_classification_prompt
+
+
+def _rich_intent():
+    return IntentDef(
+        id="concept_explain",
+        description="explain a concept",
+        positive_examples=["Why does DI reduce coupling?"],
+        negative_examples=["My app crashes."],
+        boundaries=["Prefer concept_explain over faq when the user wants understanding."],
+    )
+
+
+def test_build_classification_prompt_renders_examples_and_boundaries():
+    prompt = build_classification_prompt(
+        "SE",
+        "software engineering",
+        [_rich_intent()],
+        "why DI?",
+    )
+    assert "concept_explain: explain a concept" in prompt
+    assert "Why does DI reduce coupling?" in prompt
+    assert "My app crashes." in prompt
+    assert "Boundary: Prefer concept_explain over faq when the user wants understanding." in prompt
+
+
+def test_build_classification_prompt_omits_empty_sections():
+    prompt = build_classification_prompt(
+        "SE",
+        "software engineering",
+        [IntentDef("faq", "quick factual question")],
+        "what is a hash?",
+    )
+    assert "faq: quick factual question" in prompt
+    assert "Positive examples" not in prompt
+    assert "Negative examples" not in prompt
+    assert "Boundary:" not in prompt

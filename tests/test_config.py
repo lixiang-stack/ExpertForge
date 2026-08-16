@@ -445,3 +445,53 @@ def test_load_config_evaluation_ignores_non_dict(tmp_path, monkeypatch):
     })
     cfg = load_config(path)
     assert cfg.evaluation is None
+
+
+def test_load_domain_config_intent_definition_fields(tmp_path):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(
+        json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text(
+        "- id: concept_explain\n"
+        "  description: explain a concept\n"
+        "  positive_examples:\n"
+        "    - Why does DI reduce coupling?\n"
+        "  negative_examples:\n"
+        "    - My app crashes.\n"
+        "  boundaries:\n"
+        "    - Prefer concept_explain over faq when the user wants understanding.\n",
+        encoding="utf-8",
+    )
+    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
+    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
+    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
+    domain = load_domain_config(str(base))
+    intent = domain.intents["concept_explain"]
+    assert intent.positive_examples == ["Why does DI reduce coupling?"]
+    assert intent.negative_examples == ["My app crashes."]
+    assert intent.boundaries == [
+        "Prefer concept_explain over faq when the user wants understanding."
+    ]
+
+
+def test_load_domain_config_intent_fields_default_empty(tmp_path):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(
+        json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text(
+        "- id: faq\n  description: quick question\n", encoding="utf-8"
+    )
+    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
+    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
+    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
+    domain = load_domain_config(str(base))
+    intent = domain.intents["faq"]
+    assert intent.positive_examples == []
+    assert intent.negative_examples == []
+    assert intent.boundaries == []

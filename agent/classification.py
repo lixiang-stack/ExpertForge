@@ -4,7 +4,7 @@ import json
 import re
 from dataclasses import dataclass
 
-from .config import DomainConfig
+from .config import DomainConfig, IntentDef
 from .llm import LLMClient, LLMError
 
 COMPLEXITY_LEVELS = ("simple", "medium", "complex")
@@ -59,14 +59,29 @@ User question: {question}
 def build_classification_prompt(
     name: str,
     description: str,
-    intent_items: list[tuple[str, str]],
+    intents: list[IntentDef],
     question: str,
 ) -> str:
-    intents = "\n".join(f"- {iid}: {desc}" for iid, desc in intent_items)
+    lines: list[str] = []
+    for idef in intents:
+        header = f"- {idef.id}: {idef.description}"
+        if not (idef.positive_examples or idef.negative_examples or idef.boundaries):
+            lines.append(header)
+            continue
+        lines.append(header)
+        if idef.positive_examples:
+            lines.append("  Positive examples:")
+            lines.extend(f"    - {ex}" for ex in idef.positive_examples)
+        if idef.negative_examples:
+            lines.append("  Negative examples:")
+            lines.extend(f"    - {ex}" for ex in idef.negative_examples)
+        for b in idef.boundaries:
+            lines.append(f"  Boundary: {b}")
+    intents_block = "\n".join(lines)
     return _CLASSIFICATION_PROMPT.format(
         name=name,
         description=description,
-        intents=intents,
+        intents=intents_block,
         complexity_levels=", ".join(COMPLEXITY_LEVELS),
         question=question,
     )
@@ -130,12 +145,9 @@ class ClassificationService:
 
     def classify(self, question: str, *, model: str | None = None) -> ClassificationResult:
         intent_ids = list(self.domain.intents)
-        intent_items = [
-            (iid, idef.description) for iid, idef in self.domain.intents.items()
-        ]
         schema = build_classification_schema(intent_ids)
         prompt = build_classification_prompt(
-            self.domain.name, self.domain.description, intent_items, question
+            self.domain.name, self.domain.description, list(self.domain.intents.values()), question
         )
         messages = [{"role": "system", "content": prompt}]
         # TODO: prefer json_schema structured output once the model/provider supports it.

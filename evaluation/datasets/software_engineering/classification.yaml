@@ -11,3 +11,27 @@ cases:
     question: "My service became slow right after deploying the new caching layer. Why might that be?"
     expected: {domain: software_engineering, intent: troubleshooting, complexity: medium, strategy: debugging, orchestrate: false}
     answer_quality: true
+  - id: se-121
+    question: "Why does dependency injection reduce coupling?"
+    expected: {domain: software_engineering, intent: concept_explain, complexity: medium, strategy: teaching, orchestrate: false}
+    answer_quality: true
+  - id: se-122
+    question: "Walk me through setting up a React project step by step."
+    expected: {domain: software_engineering, intent: tutorial, complexity: medium, strategy: teaching, orchestrate: false}
+    answer_quality: true
+  - id: se-123
+    question: "Create a month-long learning path to go from zero to competent in Python."
+    expected: {domain: software_engineering, intent: learning_guide, complexity: medium, strategy: teaching, orchestrate: false}
+    answer_quality: true
+  - id: se-124
+    question: "Analyze why my API response time degrades as concurrent users increase, and identify the bottleneck."
+    expected: {domain: software_engineering, intent: performance_analysis, complexity: medium, strategy: analysis, orchestrate: false}
+    answer_quality: true
+  - id: se-125
+    question: "Compare gRPC vs REST for microservices."
+    expected: {domain: software_engineering, intent: comparison, complexity: medium, strategy: analysis, orchestrate: false}
+    answer_quality: true
+  - id: se-126
+    question: "Design the architecture of a system that must handle millions of events per second."
+    expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: analysis, orchestrate: true}
+    answer_quality: true

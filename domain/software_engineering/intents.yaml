@@ -1,22 +1,109 @@
 - id: concept_explain
-  description: Explain a concept, design rationale, or "why" question
+  description: Explain a software engineering concept, mechanism, or design rationale ("why" questions)
+  positive_examples:
+    - "Why does dependency injection reduce coupling?"
+    - "How does garbage collection work?"
+  negative_examples:
+    - "My application crashes with this error."
+    - "What is the syntax for this function?"
+  boundaries:
+    - "Prefer concept_explain over faq when the user wants understanding of a mechanism, not a short factual answer."
 - id: tutorial
-  description: Learn a topic step by step
+  description: Walk through a topic step by step so the user can follow along
+  positive_examples:
+    - "Walk me through setting up a React project step by step."
+    - "Show me how to write a basic REST endpoint."
+  negative_examples:
+    - "Create a month-long learning path to go from zero to competent in Python."
+    - "What is a hash function?"
+  boundaries:
+    - "Prefer tutorial over learning_guide when the user wants to follow concrete steps now, not a long-term plan."
 - id: learning_guide
-  description: Create a learning path or guide
+  description: Create a structured learning path or study plan
+  positive_examples:
+    - "Create a month-long learning path to go from zero to competent in Python."
+    - "What order should I study databases, networking, and operating systems in?"
+  negative_examples:
+    - "Walk me through setting up a React project step by step."
+    - "Why does dependency injection reduce coupling?"
+  boundaries:
+    - "Prefer learning_guide over tutorial when the user wants a plan or curriculum over a period of time."
 - id: faq
-  description: Quick factual or definitional question
+  description: Quick factual or definitional question with a short answer
+  positive_examples:
+    - "What is a hash function?"
+    - "What does HTTP status code 503 mean?"
+  negative_examples:
+    - "Why does dependency injection reduce coupling?"
+    - "Design the architecture of a system that must handle millions of events per second."
+  boundaries:
+    - "Prefer faq over concept_explain when the user only needs a short factual or definitional answer."
 - id: summarization
-  description: Summarize provided content
+  description: Summarize content the user provided
+  positive_examples:
+    - "Summarize the key ideas of this article into three bullet points: <article>...</article>"
+  negative_examples:
+    - "Compare gRPC and REST for microservices."
+    - "Explain how dependency injection works."
+  boundaries:
+    - "Prefer summarization when the user provides content and asks to condense it; do not use it for outside knowledge."
 - id: troubleshooting
-  description: Diagnose and resolve a specific problem
+  description: Diagnose and resolve a specific reported problem
+  positive_examples:
+    - "My service became slow right after deploying the new caching layer. Why might that be?"
+    - "My database connection pool is exhausted under load and new requests hang. How do I diagnose it?"
+  negative_examples:
+    - "Analyze why API response time degrades as concurrent users increase and identify the bottleneck."
+    - "Why does dependency injection reduce coupling?"
+  boundaries:
+    - "Prefer troubleshooting over performance_analysis when the user reports a concrete failure or symptom to fix."
 - id: comparison
-  description: Compare two or more technologies or approaches
+  description: Compare two or more technologies, approaches, or options
+  positive_examples:
+    - "Compare gRPC vs REST for microservices."
+    - "SQL vs NoSQL for an analytics workload?"
+  negative_examples:
+    - "Design the architecture of a system that must handle millions of events per second."
+    - "Why does dependency injection reduce coupling?"
+  boundaries:
+    - "Prefer comparison when the user explicitly contrasts options; prefer architecture_design when the user asks to design a system."
 - id: performance_analysis
-  description: Analyze performance characteristics or bottlenecks
+  description: Analyze performance characteristics, bottlenecks, or scaling behavior
+  positive_examples:
+    - "Analyze why API response time degrades as concurrent users increase and identify the bottleneck."
+    - "What is the performance profile of this query at scale?"
+  negative_examples:
+    - "My service became slow right after deploying the new caching layer. Why might that be?"
+    - "Review this Python function for correctness and style."
+  boundaries:
+    - "Prefer performance_analysis over troubleshooting when the user asks to analyze a performance trend or bottleneck, not fix a reported failure."
 - id: architecture_design
-  description: Design system or component architecture
+  description: Design a system, component, or architecture to meet requirements
+  positive_examples:
+    - "Design the architecture of a system that must handle millions of events per second."
+    - "How should I structure a multi-tenant SaaS backend?"
+  negative_examples:
+    - "Compare gRPC vs REST for microservices."
+    - "What is a hash function?"
+  boundaries:
+    - "Prefer architecture_design when the user asks to design or structure a system; prefer comparison when they only contrast options."
 - id: generate_code
   description: Write code to accomplish a task
+  positive_examples:
+    - "Write a Python function that retries an HTTP request with exponential backoff."
+    - "Generate a SQL query to find duplicate emails."
+  negative_examples:
+    - "Review this Python function for correctness and style."
+    - "Why does dependency injection reduce coupling?"
+  boundaries:
+    - "Prefer generate_code when the user asks for code to be produced; prefer code_review when they provide code and ask for feedback."
 - id: code_review
-  description: Review provided code
+  description: Review code the user provided for correctness, style, or improvement
+  positive_examples:
+    - "Review this Python function for correctness and style: <code>def sum(a, b): return a + b</code>"
+    - "What issues do you see in this pull request diff?"
+  negative_examples:
+    - "Write a Python function that retries an HTTP request with exponential backoff."
+    - "What is a hash function?"
+  boundaries:
+    - "Prefer code_review when the user provides code and asks for feedback; prefer generate_code when they ask for new code."
