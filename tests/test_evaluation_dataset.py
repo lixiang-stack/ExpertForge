@@ -213,3 +213,14 @@ def test_complexity_boundary_cases_present():
     assert cases["se-128"].expected_complexity == "complex"
     assert "12-factor" in cases["se-127"].question
     assert "distributed rate limiter" in cases["se-128"].question
+
+
+def test_policy_behavior_cases_present():
+    suites = load_suites("evaluation/datasets/software_engineering")
+    cases = {c.id: c for s in suites for c in s.cases}
+    assert cases["se-054"].expected_strategy == "debugging"
+    assert "no logs" in cases["se-054"].question
+    assert cases["se-082"].expected_strategy == "analysis"
+    assert "monolith" in cases["se-082"].question
+    assert cases["se-103"].expected_strategy == "code_snippet"
+    assert "closes the file" in cases["se-103"].question

@@ -49,8 +49,11 @@ Each expert domain lives in its own directory, e.g. `domain/software_engineering
 - `strategies.yaml`: strategy definitions — per-strategy optional `model`,
   `complexity_gate`, and exactly one `default: true` marker (the strategy used for
   unmapped intents).
-- `prompts/*.md`: one fully self-contained system prompt per strategy. Each file
-  embeds the strategy's answer structure and domain context directly, with **no**
+- `expert_policy.md`: the shared expert identity and answer policy, prepended to
+  the system prompt at runtime.
+- `prompts/*.md`: one system prompt per strategy. Each file carries only the
+  strategy's specific behavior; the shared expert identity/policy lives in
+  `expert_policy.md` and is prepended to the system prompt at runtime, with **no**
   placeholders (`{name}`/`{description}`/`{structure}`).
 
 Strategies are fully data-driven: swapping in a new expert domain means writing a new

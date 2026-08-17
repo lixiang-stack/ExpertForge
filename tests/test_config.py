@@ -443,6 +443,55 @@ def test_load_domain_config_complexity_missing_level_raises(tmp_path):
         load_domain_config(str(base))
 
 
+def test_load_domain_config_expert_policy(tmp_path):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(
+        json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text("", encoding="utf-8")
+    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
+    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
+    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
+    (base / "expert_policy.md").write_text(
+        "You are a Senior Software Engineering Expert.", encoding="utf-8"
+    )
+    domain = load_domain_config(str(base))
+    assert domain.expert_policy == "You are a Senior Software Engineering Expert."
+
+
+def test_load_domain_config_expert_policy_missing_is_empty(tmp_path):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(
+        json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text("", encoding="utf-8")
+    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
+    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
+    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
+    domain = load_domain_config(str(base))
+    assert domain.expert_policy == ""
+
+
+def test_load_domain_config_expert_policy_empty_is_empty(tmp_path):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(
+        json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text("", encoding="utf-8")
+    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
+    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
+    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
+    (base / "expert_policy.md").write_text("", encoding="utf-8")
+    domain = load_domain_config(str(base))
+    assert domain.expert_policy == ""
+
+
 def test_load_domain_config_mapping_unknown_intent(tmp_path):
     base = tmp_path / "domain"
     (base / "prompts").mkdir(parents=True)

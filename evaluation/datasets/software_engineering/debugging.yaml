@@ -7,3 +7,7 @@ cases:
     question: "My Node.js app crashes with an out-of-memory error only in production. How should I debug this?"
     expected: {domain: software_engineering, intent: troubleshooting, complexity: medium, strategy: debugging, orchestrate: false}
     answer_quality: true
+  - id: se-054
+    question: "My service returns 500 errors sporadically in production, but I have no logs or stack traces yet. What is the root cause?"
+    expected: {domain: software_engineering, intent: troubleshooting, complexity: medium, strategy: debugging, orchestrate: false}
+    answer_quality: true

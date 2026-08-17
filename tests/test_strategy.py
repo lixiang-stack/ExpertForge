@@ -50,6 +50,18 @@ def test_build_system_prompt_returns_template_verbatim():
     assert "{structure}" not in prompt
 
 
+def test_build_system_prompt_prepends_expert_policy():
+    p = Strategy("direct", "Strategy text.", expert_policy="POLICY")
+    assert p.build_system_prompt() == "POLICY\n\nStrategy text."
+
+
+def test_build_registry_passes_expert_policy():
+    domain = _domain()
+    domain.expert_policy = "POLICY"
+    registry = build_registry(domain)
+    assert registry["direct"].build_system_prompt() == "POLICY\n\nDirect answer prompt."
+
+
 def test_process_single_call_returns_string():
     client = FakeClient("answer")
     p = Strategy("direct", "You are an agent in the X domain.")
