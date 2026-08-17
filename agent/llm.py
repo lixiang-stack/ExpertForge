@@ -21,8 +21,11 @@ class ChatResult:
 
 
 class LLMClient:
-    def __init__(self, base_url: str, api_key: str, model: str, timeout: float = 60.0):
-        self.client = OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
+    def __init__(self, base_url: str, api_key: str, model: str, timeout: float | None = None):
+        kwargs: dict = {"api_key": api_key, "base_url": base_url}
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        self.client = OpenAI(**kwargs)
         self.model = model
 
     def chat_completion(

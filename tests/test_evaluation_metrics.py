@@ -15,7 +15,7 @@ def _case(cid, domain="software_engineering", intent="faq", complexity="simple",
 
 def _result(case, *, in_domain=True, intent=None, complexity=None, strategy=None,
             orchestrate=False, actual_model=None, expected_model=None, scorecard=None,
-            in_tokens=10, out_tokens=5, cache_tokens=1, latency=10.0):
+            in_tokens=10, out_tokens=5, cache_tokens=1, latency=10.0, error=None):
     return CaseResult(
         case=case, in_domain=in_domain,
         intent=case.expected_intent if intent is None else intent,
@@ -25,6 +25,7 @@ def _result(case, *, in_domain=True, intent=None, complexity=None, strategy=None
         expected_model=expected_model, scorecard=scorecard,
         llm_calls=2, in_tokens=in_tokens, out_tokens=out_tokens,
         total_tokens=in_tokens + out_tokens, cache_tokens=cache_tokens, latency_ms=latency,
+        error=error,
     )
 
 
@@ -154,3 +155,16 @@ def test_cost_aggregates_and_by_path():
     assert set(cost["by_path"]) == {"simple", "medium", "complex"}
     assert cost["by_path"]["simple"]["in_tokens"] == 10
     assert cost["by_path"]["complex"]["total_tokens"] == 42
+
+
+def test_n_failed_counts_error_cases():
+    cases = [_case("a"), _case("b")]
+    results = [_result(cases[0]), _result(cases[1], error="LLMError: boom")]
+    m = _m(cases, results)
+    assert m["n_failed"] == 1
+
+
+def test_n_failed_zero_without_errors():
+    cases = [_case("a")]
+    m = _m(cases, [_result(cases[0])])
+    assert m["n_failed"] == 0

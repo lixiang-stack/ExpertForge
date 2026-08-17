@@ -1,8 +1,10 @@
+import threading
+
 import pytest
 
 from agent.chat import Chat
 from agent.config import AgentConfig, DomainConfig, IntentDef, ObservabilityConfig, StrategyDef
-from agent.llm import ChatResult
+from agent.llm import ChatResult, LLMError
 from agent.observability import patch as patch_mod
 from agent.observability.client import TracedLLMClient
 from agent.observability.tracing import TraceStore, current_phase, read_events
@@ -28,9 +30,25 @@ class FakeInner:
         return iter([])
 
 
+class RaisingInner(FakeInner):
+    def __init__(self, responses, raise_on_call):
+        super().__init__(responses)
+        self.raise_on_call = raise_on_call
+        self._count = 0
+        self._lock = threading.Lock()
+
+    def chat_completion(self, messages, *, model=None, temperature=0.3, **kwargs):
+        with self._lock:
+            self._count += 1
+            should_raise = self._count == self.raise_on_call
+        if should_raise:
+            raise LLMError("worker boom")
+        return super().chat_completion(messages, model=model, temperature=temperature, **kwargs)
+
+
 _CLASSIFY = '{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}'
 _CLASSIFY_COMPLEX = '{"in_domain": true, "intent": "troubleshooting", "complexity": "complex", "reason": "ok"}'
-_PLAN = '{"tasks": [{"title": "t1", "instruction": "i1"}, {"title": "t2", "instruction": "i2"}]}'
+_PLAN = '{"tasks": [{"title": "t1", "instruction": "i1", "role": "R1"}, {"title": "t2", "instruction": "i2", "role": "R2"}]}'
 
 
 def _config():
@@ -165,3 +183,33 @@ def test_respond_forwards_route_kwarg_in_passthrough(tmp_path):
 
     assert resp.kind == "answer"
     assert resp.text == "the answer"
+
+
+def test_orchestration_planner_decision_records_roles(tmp_path):
+    store = _store(tmp_path)
+    inner = FakeInner([_CLASSIFY_COMPLEX, _PLAN, "w1", "w2", "final"])
+    chat = Chat(inner, _config(), _domain_complex())
+    patch_mod.Installed(store, {}).apply()
+    resp = chat.respond("huge debugging task")
+    assert resp.text == "final"
+    events, _ = read_events(tmp_path / "obs")
+    planner = [e for e in events if e["type"] == "decision" and e["phase"] == "orchestration.planner"]
+    assert len(planner) == 1
+    assert [t["role"] for t in planner[0]["data"]["tasks"]] == ["R1", "R2"]
+
+
+def test_orchestration_worker_failure_recorded(tmp_path):
+    store = _store(tmp_path)
+    inner = RaisingInner([_CLASSIFY_COMPLEX, _PLAN, "w1", "final"], raise_on_call=3)
+    chat = Chat(inner, _config(), _domain_complex())
+    patch_mod.Installed(store, {}).apply()
+    resp = chat.respond("huge debugging task")
+    assert resp.text == "final"  # partial failure still yields an answer
+    events, _ = read_events(tmp_path / "obs")
+    worker_decisions = [
+        e for e in events
+        if e["type"] == "decision" and e["phase"].startswith("orchestration.worker.")
+    ]
+    errors = [e["data"].get("error") for e in worker_decisions]
+    assert len(errors) == 2
+    assert errors.count(None) == 1 and errors.count("worker boom") == 1

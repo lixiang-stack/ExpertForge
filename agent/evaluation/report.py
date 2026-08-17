@@ -30,6 +30,7 @@ def _case_record(r) -> dict:
         "total_tokens": r.total_tokens,
         "cache_tokens": r.cache_tokens,
         "latency_ms": r.latency_ms,
+        "error": r.error,
     }
 
 
@@ -110,6 +111,10 @@ def format_summary(record: dict) -> str:
         f"Evaluation run: {record['label']}  (domain={record['domain']}, "
         f"cases={m['n_cases']}, model={record['model']}, "
         f"judge_model={record['judge_model'] or record['model']})",
+    ]
+    if m.get("n_failed"):
+        lines.append(f"Failed cases: {m['n_failed']}")
+    lines += [
         "",
         "Classification:",
         f"  domain_accuracy     {_fmt_accuracy(cls['domain_accuracy'])}",

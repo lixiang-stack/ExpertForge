@@ -201,7 +201,8 @@ class Installed:
                 tid = current_trace_id()
                 if tid:
                     data = {"degraded": True} if tasks is None else {
-                        "tasks": [{"title": t, "instruction": i} for t, i in tasks]}
+                        "tasks": [{"title": t.title, "instruction": t.instruction,
+                                   "role": t.role} for t in tasks]}
                     inst._record_decision(tid, inst._phase(key), data)
                 return tasks
         return wrapper
@@ -210,23 +211,31 @@ class Installed:
         def wrapper(orch, question, task, context, model):
             inst = _current_inst()
             if inst is None:
-                return original(orch, question, task, context, model)
+                return original(orch, question, task, context, model)  # passthrough: real business call
             base = inst._phase(key)
             n = inst._next_worker(current_trace_id() or "")
             with phase(f"{base}.{n}"):
                 tid = current_trace_id()
+                try:
+                    result = original(orch, question, task, context, model)  # <-- real business call
+                except Exception as e:  # noqa: BLE001 - record failure, then re-raise; business decides
+                    if tid:
+                        inst._record_decision(tid, f"{base}.{n}", {
+                            "task": task.title, "role": task.role, "error": str(e)})
+                    raise
                 if tid:
-                    inst._record_decision(tid, f"{base}.{n}", {"task": task[0]})
-                return original(orch, question, task, context, model)  # <-- real business call
+                    inst._record_decision(tid, f"{base}.{n}", {
+                        "task": task.title, "role": task.role})
+                return result
         return wrapper
 
     def _wrap_aggregate(self, original, key):
-        def wrapper(orch, question, strategy, context, tasks, outputs, model):
+        def wrapper(orch, question, strategy, context, results, model):
             inst = _current_inst()
             if inst is None:
-                return original(orch, question, strategy, context, tasks, outputs, model)  # passthrough: real business call
+                return original(orch, question, strategy, context, results, model)  # passthrough: real business call
             with phase(inst._phase(key)):
-                return original(orch, question, strategy, context, tasks, outputs, model)  # <-- real business call
+                return original(orch, question, strategy, context, results, model)  # <-- real business call
         return wrapper
 
     def _wrap_direct(self, original, key):

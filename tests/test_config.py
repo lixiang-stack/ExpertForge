@@ -693,3 +693,88 @@ def test_load_domain_config_intent_fields_default_empty(tmp_path):
     assert intent.positive_examples == []
     assert intent.negative_examples == []
     assert intent.boundaries == []
+
+
+def test_load_config_orchestrator_parsed(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "orchestrator": {"max_workers": 8, "worker_timeout": 90},
+    })
+    cfg = load_config(path)
+    assert cfg.orchestrator is not None
+    assert cfg.orchestrator.max_workers == 8
+    assert cfg.orchestrator.worker_timeout == 90
+
+
+def test_load_config_orchestrator_none_when_missing(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+    })
+    cfg = load_config(path)
+    assert cfg.orchestrator is None
+
+
+def test_load_config_orchestrator_invalid_values_default(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "orchestrator": {"max_workers": 0, "worker_timeout": -5},
+    })
+    cfg = load_config(path)
+    assert cfg.orchestrator.max_workers == 4
+    assert cfg.orchestrator.worker_timeout == 120.0
+
+
+def test_load_config_orchestrator_non_dict_ignored(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "orchestrator": "nope",
+    })
+    cfg = load_config(path)
+    assert cfg.orchestrator is None
+
+
+def test_load_config_timeout_default_is_none(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+    })
+    cfg = load_config(path)
+    assert cfg.timeout is None  # unspecified -> SDK default
+
+
+def test_load_config_timeout_parsed(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "timeout": 240,
+    })
+    cfg = load_config(path)
+    assert cfg.timeout == 240.0
+
+
+def test_load_config_timeout_invalid_is_none(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "timeout": "soon",
+    })
+    cfg = load_config(path)
+    assert cfg.timeout is None

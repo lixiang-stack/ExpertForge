@@ -105,3 +105,40 @@ def test_format_summary_has_per_complexity():
     text = format_summary(_record())
     assert "per_complexity" in text
     assert "simple:" in text
+
+
+def test_case_record_includes_error():
+    case = _case("a")
+    r = _result(case)
+    r.error = "LLMError: boom"
+    record = serialize_results(
+        [r], {}, {}, domain="software_engineering", label="run1",
+        model="m", judge_model="judge-a", skip_quality=False,
+        dataset_path="evaluation/datasets/software_engineering", suites=["direct"],
+    )
+    assert record["cases"][0]["error"] == "LLMError: boom"
+
+
+def test_case_record_error_none_by_default():
+    case = _case("a")
+    record = serialize_results(
+        [_result(case)], {}, {}, domain="software_engineering", label="run1",
+        model="m", judge_model="judge-a", skip_quality=False,
+        dataset_path="evaluation/datasets/software_engineering", suites=["direct"],
+    )
+    assert record["cases"][0]["error"] is None
+
+
+def test_format_summary_shows_failed_cases():
+    case = _case("a")
+    r = _result(case)
+    r.error = "LLMError: boom"
+    suite = Suite(name="direct", domain="software_engineering", cases=[case])
+    m = compute_metrics(suite, [r])
+    record = serialize_results(
+        [r], m, {"direct": m}, domain="software_engineering", label="run1",
+        model="m", judge_model="judge-a", skip_quality=False,
+        dataset_path="evaluation/datasets/software_engineering", suites=["direct"],
+    )
+    text = format_summary(record)
+    assert "Failed cases: 1" in text

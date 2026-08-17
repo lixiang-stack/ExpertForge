@@ -72,6 +72,7 @@ class CaseResult:
     total_tokens: int = 0
     cache_tokens: int = 0
     latency_ms: float = 0.0
+    error: str | None = None
 
 
 def _sum_calls(calls: list[dict]) -> dict:
@@ -121,38 +122,45 @@ def run_evaluation(
     results: list[CaseResult] = []
     for case in suite.cases:
         recorder.reset()
-        chat = Chat(recorder, config, domain)  # fresh history per case
-        route = router.route(case.question)
-        expected_model = resolve_model(config, domain, route, config.model)
+        route = None
+        expected_model = None
         answer = None
         scorecard = None
         actual_model = None
-        if case.answer_quality and not skip_quality:
-            resp = chat.respond(case.question, route=route)
-            answer = resp.text
-            # actual_model is captured from the last recorded LLM call AFTER
-            # `chat.respond` but BEFORE the judge runs, so it reflects the model
-            # that produced the answer, not the judge's model. When the route is
-            # out-of-domain `chat.respond` returns the reject reply without making
-            # an LLM call, so `calls[-1]` would be the router's classification
-            # call instead -- not the answer model. Guard on `route.in_domain` so
-            # actual_model stays None in that case.
-            actual_model = (recorder.calls[-1]["model"] if route.in_domain and recorder.calls
-                            else None)
-            scorecard = judge.score(case.question, answer, reference=case.reference)
+        error = None
+        try:
+            chat = Chat(recorder, config, domain)  # fresh history per case
+            route = router.route(case.question)
+            expected_model = resolve_model(config, domain, route, config.model)
+            if case.answer_quality and not skip_quality:
+                resp = chat.respond(case.question, route=route)
+                answer = resp.text
+                # actual_model is captured from the last recorded LLM call AFTER
+                # `chat.respond` but BEFORE the judge runs, so it reflects the model
+                # that produced the answer, not the judge's model. When the route is
+                # out-of-domain `chat.respond` returns the reject reply without making
+                # an LLM call, so `calls[-1]` would be the router's classification
+                # call instead -- not the answer model. Guard on `route.in_domain` so
+                # actual_model stays None in that case.
+                actual_model = (recorder.calls[-1]["model"] if route.in_domain and recorder.calls
+                                else None)
+                scorecard = judge.score(case.question, answer, reference=case.reference)
+        except Exception as e:  # noqa: BLE001 -- one failing case must not abort the run
+            error = f"{type(e).__name__}: {e}"
         costs = _sum_calls(recorder.calls)
         results.append(CaseResult(
             case=case,
-            in_domain=route.in_domain,
-            intent=route.intent,
-            complexity=route.complexity,
-            strategy=route.strategy,
-            orchestrate=route.orchestrate,
+            in_domain=bool(route and route.in_domain),
+            intent=route.intent if route else None,
+            complexity=route.complexity if route else None,
+            strategy=route.strategy if route else None,
+            orchestrate=bool(route and route.orchestrate),
             answer=answer,
             actual_model=actual_model,
             expected_model=expected_model,
             scorecard=scorecard,
             suite=suite.name,
+            error=error,
             **costs,
         ))
     return results
