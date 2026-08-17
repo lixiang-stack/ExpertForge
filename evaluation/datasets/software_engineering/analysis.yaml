@@ -11,3 +11,7 @@ cases:
     question: "Compare the Go defer statement with C++ RAII for resource management."
     expected: {domain: software_engineering, intent: comparison, complexity: simple, strategy: analysis, orchestrate: false}
     answer_quality: true
+  - id: se-082
+    question: "Should a startup migrate from a monolith to microservices now, or stay with the monolith?"
+    expected: {domain: software_engineering, intent: architecture_design, complexity: medium, strategy: analysis, orchestrate: false}
+    answer_quality: true

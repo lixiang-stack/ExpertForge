@@ -4,11 +4,14 @@ from .config import DomainConfig
 
 
 class Strategy:
-    def __init__(self, strategy_id: str, prompt_template: str):
+    def __init__(self, strategy_id: str, prompt_template: str, expert_policy: str = ""):
         self.strategy_id = strategy_id
         self.prompt_template = prompt_template
+        self.expert_policy = expert_policy
 
     def build_system_prompt(self) -> str:
+        if self.expert_policy:
+            return self.expert_policy + "\n\n" + self.prompt_template
         return self.prompt_template
 
     def build_messages(
@@ -31,6 +34,6 @@ class Strategy:
 
 def build_registry(domain: DomainConfig) -> dict[str, Strategy]:
     return {
-        sid: Strategy(sid, domain.prompts[sid])
+        sid: Strategy(sid, domain.prompts[sid], expert_policy=domain.expert_policy)
         for sid in domain.strategies
     }

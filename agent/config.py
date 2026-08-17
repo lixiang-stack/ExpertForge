@@ -179,6 +179,7 @@ class DomainConfig:
     default_strategy: str
     prompts: dict[str, str]
     complexity: ComplexityPolicy | None = None
+    expert_policy: str = ""
 
 
 def _read_json(path: Path) -> dict:
@@ -339,6 +340,11 @@ def load_domain_config(domain_dir: str) -> DomainConfig:
         prompts[sid] = _read_prompt(prompt_dir / f"{sid}.md")
     prompts["unsupported_complex"] = _read_prompt(prompt_dir / "unsupported_complex.md")
 
+    expert_policy = ""
+    expert_policy_path = base / "expert_policy.md"
+    if expert_policy_path.is_file():
+        expert_policy = expert_policy_path.read_text(encoding="utf-8")
+
     return DomainConfig(
         name=name,
         description=description,
@@ -349,4 +355,5 @@ def load_domain_config(domain_dir: str) -> DomainConfig:
         default_strategy=configured_default,
         prompts=prompts,
         complexity=complexity,
+        expert_policy=expert_policy,
     )
