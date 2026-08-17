@@ -10,7 +10,15 @@ from agent.llm import LLMClient, LLMError
 def test_constructor_configures_openai(mock_openai):
     LLMClient("https://api.example.com/v1", "key", "model-a")
     mock_openai.assert_called_once_with(
-        api_key="key", base_url="https://api.example.com/v1", timeout=60
+        api_key="key", base_url="https://api.example.com/v1"
+    )  # no timeout: OpenAI SDK default applies
+
+
+@patch("agent.llm.OpenAI")
+def test_constructor_passes_explicit_timeout(mock_openai):
+    LLMClient("https://api.example.com/v1", "key", "model-a", timeout=120)
+    mock_openai.assert_called_once_with(
+        api_key="key", base_url="https://api.example.com/v1", timeout=120
     )
 
 

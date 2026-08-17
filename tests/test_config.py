@@ -743,3 +743,38 @@ def test_load_config_orchestrator_non_dict_ignored(tmp_path, monkeypatch):
     })
     cfg = load_config(path)
     assert cfg.orchestrator is None
+
+
+def test_load_config_timeout_default_is_none(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+    })
+    cfg = load_config(path)
+    assert cfg.timeout is None  # unspecified -> SDK default
+
+
+def test_load_config_timeout_parsed(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "timeout": 240,
+    })
+    cfg = load_config(path)
+    assert cfg.timeout == 240.0
+
+
+def test_load_config_timeout_invalid_is_none(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "timeout": "soon",
+    })
+    cfg = load_config(path)
+    assert cfg.timeout is None

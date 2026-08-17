@@ -1,4 +1,11 @@
-from agent.config import AgentConfig, DomainConfig, EvaluationConfig, IntentDef, StrategyDef
+from agent.config import (
+    AgentConfig,
+    DomainConfig,
+    EvaluationConfig,
+    IntentDef,
+    StrategyDef,
+    effective_timeout,
+)
 from agent.evaluation.dataset import Suite, EvalCase
 from agent.evaluation.runner import RecordingClient, run_evaluation
 
@@ -39,18 +46,23 @@ def _config():
                        evaluation=EvaluationConfig(judge_model="judge-a"))
 
 
-from agent.llm import ChatResult
+from agent.llm import ChatResult, LLMError
 
 
 class FakeClient:
-    def __init__(self, responses, usage=None):
+    def __init__(self, responses, usage=None, fail_on_call=None):
         self.responses = list(responses)
         self.models = []
         self.json_modes = []
         self.usage_queue = list(usage or [])
+        self.fail_on_call = fail_on_call
+        self.call_count = 0
 
     def chat_completion(self, messages, model=None, temperature=0.3,
                         disable_thinking=False, json_mode=False, json_schema=None):
+        self.call_count += 1
+        if self.call_count == self.fail_on_call:
+            raise LLMError("boom")
         self.models.append(model)
         self.json_modes.append(json_mode)
         prompt = completion = cached = 0
@@ -152,3 +164,63 @@ def test_run_evaluation_records_suite():
     results = run_evaluation(_config(), _domain(), _dataset(), client, skip_quality=True)
     assert results[0].suite == "direct"
     assert results[1].suite == "direct"
+
+
+def test_effective_timeout_none_without_orchestrator():
+    assert effective_timeout(_config()) is None  # SDK default applies
+
+
+def test_effective_timeout_uses_worker_timeout_when_timeout_unset():
+    from agent.config import OrchestratorConfig
+    cfg = _config()
+    cfg.orchestrator = OrchestratorConfig(worker_timeout=300.0)
+    assert effective_timeout(cfg) == 300.0
+
+
+def test_effective_timeout_uses_worker_timeout_when_larger():
+    from agent.config import OrchestratorConfig
+    cfg = _config()
+    cfg.timeout = 120.0
+    cfg.orchestrator = OrchestratorConfig(worker_timeout=300.0)
+    assert effective_timeout(cfg) == 300.0
+
+
+def test_effective_timeout_keeps_configured_timeout_when_larger():
+    from agent.config import OrchestratorConfig
+    cfg = _config()
+    cfg.timeout = 900.0
+    cfg.orchestrator = OrchestratorConfig(worker_timeout=300.0)
+    assert effective_timeout(cfg) == 900.0
+
+
+def test_run_evaluation_records_answer_error_and_continues():
+    client = FakeClient([
+        '{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}',
+        "the answer",
+        '{"in_domain": false, "intent": null, "complexity": null, "reason": "unrelated"}',
+    ], fail_on_call=2)  # the answer-generation call fails
+    results = run_evaluation(_config(), _domain(), _dataset(), client)
+    assert len(results) == 2
+    r0 = results[0]
+    assert r0.error == "LLMError: boom"
+    assert r0.answer is None
+    assert r0.scorecard is None
+    assert r0.in_domain is True          # route succeeded, answer phase failed
+    r1 = results[1]
+    assert r1.error is None              # later case still processed
+    assert r1.strategy == "reject"
+
+
+def test_run_evaluation_records_route_stage_error():
+    client = FakeClient([
+        '{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}',
+        "the answer",
+        '{"in_domain": false, "intent": null, "complexity": null, "reason": "unrelated"}',
+    ], fail_on_call=4)  # the second case's classification call fails
+    results = run_evaluation(_config(), _domain(), _dataset(), client)
+    assert len(results) == 2
+    r1 = results[1]
+    assert r1.error == "LLMError: boom"
+    assert r1.in_domain is False
+    assert r1.strategy is None
+    assert r1.expected_model is None

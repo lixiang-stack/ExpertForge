@@ -105,6 +105,7 @@ def compute_metrics(suite: Suite, results: list[CaseResult]) -> dict:
 
     return {
         "n_cases": n,
+        "n_failed": sum(1 for r in results if r.error is not None),
         "classification": {
             "domain_accuracy": _accuracy(domain_correct, n),
             "intent_accuracy": _accuracy(intent_correct, intent_total),

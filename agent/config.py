@@ -45,6 +45,7 @@ class AgentConfig:
     domain_dir: str
     model_low: str | None = None
     model_high: str | None = None
+    timeout: float | None = None
     observability: ObservabilityConfig | None = None
     evaluation: EvaluationConfig | None = None
     orchestrator: OrchestratorConfig | None = None
@@ -99,6 +100,9 @@ def load_config(path: str | None = None) -> AgentConfig:
     if not isinstance(domain_dir, str) or not domain_dir:
         raise ConfigError("Missing 'domain_dir' in config.")
 
+    timeout = raw.get("timeout")
+    timeout = timeout if isinstance(timeout, (int, float)) and timeout > 0 else None
+
     raw_obs = raw.get("observability")
     observability = None
     if isinstance(raw_obs, dict):
@@ -140,10 +144,26 @@ def load_config(path: str | None = None) -> AgentConfig:
         domain_dir=domain_dir,
         model_low=model_low,
         model_high=model_high,
+        timeout=timeout,
         observability=observability,
         evaluation=evaluation,
         orchestrator=orchestrator,
     )
+
+
+def effective_timeout(config: AgentConfig) -> float | None:
+    """Client timeout for LLM calls, derived from config only.
+
+    ``None`` leaves the OpenAI SDK default in place. When an orchestrator
+    worker timeout is configured, the client timeout never falls below it so
+    the worker pool's wall-clock limit governs workers instead of the client.
+    """
+    worker = config.orchestrator.worker_timeout if config.orchestrator else 0.0
+    if config.timeout is not None:
+        return max(config.timeout, worker)
+    if worker > 0:
+        return worker
+    return None
 
 
 def get_api_key() -> str:
