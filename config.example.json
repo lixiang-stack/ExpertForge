@@ -4,6 +4,10 @@
   "model_low": "",
   "model_high": "",
   "domain_dir": "domain/software_engineering",
+  "orchestrator": {
+    "max_workers": 4,
+    "worker_timeout": 120
+  },
   "evaluation": {
     "judge_model": "deepseek-v4-pro",
     "results_dir": "evaluation/results"

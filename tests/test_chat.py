@@ -67,7 +67,7 @@ def test_respond_answer_appends_history():
 def test_respond_orchestrates_complex():
     client = FakeClient([
         '{"in_domain": true, "intent": "troubleshooting", "complexity": "complex", "reason": "ok"}',
-        '{"tasks": [{"title": "t1", "instruction": "i1"}, {"title": "t2", "instruction": "i2"}]}',
+        '{"tasks": [{"title": "t1", "instruction": "i1", "role": "R1"}, {"title": "t2", "instruction": "i2", "role": "R2"}]}',
         "worker1 output",
         "worker2 output",
         "final answer",

@@ -230,6 +230,20 @@ def test_group_stages_workers_collapse_into_one_stage():
     assert len(stages[0].workers[1].steps) == 2
 
 
+def test_group_stages_worker_title_set_from_decision_regardless_of_order():
+    # llm_call arrives BEFORE the decision (current write-side ordering): the
+    # worker title must still be captured from the decision event.
+    events = [
+        {"type": "llm_call", "trace_id": "a", "phase": "orchestration.worker.1", "model": "m",
+         "prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3,
+         "latency_ms": 10, "status": "ok", "ts": 1},
+        {"type": "decision", "trace_id": "a", "phase": "orchestration.worker.1", "ts": 2,
+         "data": {"task": "t1"}},
+    ]
+    stages = group_stages(build_timeline(events))["a"]
+    assert stages[0].workers[0].task_title == "t1"
+
+
 def test_group_stages_empty_timeline():
     assert group_stages({}) == {}
 

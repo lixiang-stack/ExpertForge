@@ -32,6 +32,12 @@ class EvaluationConfig:
 
 
 @dataclass
+class OrchestratorConfig:
+    max_workers: int = 4
+    worker_timeout: float = 120.0
+
+
+@dataclass
 class AgentConfig:
     base_url: str
     model: str
@@ -41,6 +47,7 @@ class AgentConfig:
     model_high: str | None = None
     observability: ObservabilityConfig | None = None
     evaluation: EvaluationConfig | None = None
+    orchestrator: OrchestratorConfig | None = None
 
 
 def _read_json_file(path: str) -> dict:
@@ -114,6 +121,18 @@ def load_config(path: str | None = None) -> AgentConfig:
             results_dir=results_dir if isinstance(results_dir, str) else "evaluation/results",
         )
 
+    raw_orch = raw.get("orchestrator")
+    orchestrator = None
+    if isinstance(raw_orch, dict):
+        max_workers = raw_orch.get("max_workers")
+        worker_timeout = raw_orch.get("worker_timeout")
+        orchestrator = OrchestratorConfig(
+            max_workers=max_workers if isinstance(max_workers, int) and max_workers > 0 else 4,
+            worker_timeout=worker_timeout
+            if isinstance(worker_timeout, (int, float)) and worker_timeout > 0
+            else 120.0,
+        )
+
     return AgentConfig(
         base_url=base_url,
         model=model,
@@ -123,6 +142,7 @@ def load_config(path: str | None = None) -> AgentConfig:
         model_high=model_high,
         observability=observability,
         evaluation=evaluation,
+        orchestrator=orchestrator,
     )
 
 

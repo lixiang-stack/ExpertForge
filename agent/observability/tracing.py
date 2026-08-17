@@ -126,24 +126,22 @@ def read_events(data_dir: str | Path, *, day: str | None = None) -> tuple[list[d
 class _Span:
     """Live per-trace state of the current execution context.
 
-    `phases` is a STACK of the current nesting path, NOT a collection of all
-    phases of a trace. Siblings never coexist in it; each `with phase(...)`
-    block pushes on enter and pops on exit, so the stack only ever holds the
-    chain from the outermost phase down to the innermost one.
-
-    Example while a planner runs worker #3:
-        phases == ["orchestration.planner", "orchestration.worker.3"]
-        current_phase() returns phases[-1] -> "orchestration.worker.3"
-    When worker #3 exits, pop() restores the outer "orchestration.planner".
-
-    The one-to-many structure ("a phase contains many sub-events") is NOT
-    stored here: events written inside the same phase share the same phase
-    string in the flat event stream, and the read model (report_data.py)
-    re-groups them into Stage / WorkerGroup trees afterwards.
+    `phases` is a per-OS-thread stack (via `threading.local`): each worker
+    thread keeps its own nesting path, so parallel workers never corrupt each
+    other's `current_phase()`. Everything else about the phase model is
+    unchanged — the stack holds the chain from outermost phase to innermost
+    one for the current thread only.
     """
 
     trace_id: str
-    phases: list[str] = field(default_factory=list)
+    _local: threading.local = field(default_factory=threading.local)
+
+    @property
+    def phases(self) -> list[str]:
+        stack = getattr(self._local, "stack", None)
+        if stack is None:
+            stack = self._local.stack = []
+        return stack
 
 
 _span_var: contextvars.ContextVar[_Span | None] = contextvars.ContextVar(

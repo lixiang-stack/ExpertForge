@@ -1,10 +1,12 @@
 import json
 import threading
+import time
 import warnings
 from pathlib import Path
 
 from agent.observability.tracing import (
     TraceStore,
+    _Span,
     current_phase,
     current_trace_id,
     format_trace_summary,
@@ -121,3 +123,22 @@ def test_read_events_corrupt_non_utf8_day_file_does_not_raise(tmp_path):
     events, bad = read_events(day_dir, day="2026-08-11")
     assert bad == 1
     assert [e["trace_id"] for e in events] == ["a", "b"]
+
+
+def test_span_phases_are_thread_local():
+    span = _Span(trace_id="x")
+    results = {}
+
+    def worker(name):
+        span.phases.append(name)
+        time.sleep(0.05)
+        results[name] = span.phases[-1]
+        span.phases.pop()
+
+    t1 = threading.Thread(target=worker, args=("A",))
+    t2 = threading.Thread(target=worker, args=("B",))
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+    assert results == {"A": "A", "B": "B"}

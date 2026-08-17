@@ -249,7 +249,9 @@ def group_stages(timeline: dict[str, list[Step]]) -> dict[str, list[Stage]]:
                 if wg is None:
                     wg = WorkerGroup(number=n, task_title=_worker_task(s))
                     stage.workers.append(wg)
-                if s.kind != "decision":
+                if s.kind == "decision":
+                    wg.task_title = _worker_task(s)
+                else:
                     wg.steps.append(s)
             else:
                 stage.steps.append(s)
