@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from .config import AgentConfig, DomainConfig, OrchestratorConfig
-from .llm import LLMClient
+from .config import AgentConfig, DomainConfig
+from .evaluation.judge import Judge
+from .llm import LLMClient, LLMError
 from .parsing import parse_json
 from .strategy import build_registry
 from .router import RouteResult
@@ -45,6 +46,28 @@ Rules:
 """
 
 
+_REAGGREGATE_SYSTEM_PROMPT = """{context}
+
+You are synthesizing sub-task results into one coherent final answer to the
+user's original question. Some sub-task results may be missing due to worker
+failure; produce the best answer from what is available.
+
+A previous draft scored too low on these judge dimensions; produce an
+improved draft that addresses them:
+{feedback_lines}
+"""
+
+_REAGGREGATE_USER_TEMPLATE = """User question: {question}
+
+Sub-task results:
+
+{sub_task_sections}
+
+Previous draft:
+{previous}
+"""
+
+
 class Orchestrator:
     def __init__(self, client: LLMClient, config: AgentConfig, domain: DomainConfig):
         self.client = client
@@ -59,19 +82,79 @@ class Orchestrator:
     def run(self, question: str, route: RouteResult, model: str) -> str:
         context = self._strategy_context(route.strategy)
         tasks = self._plan(question, route.strategy, context, model)
-        # TODO: add Evaluator / Optimizer phases after aggregation (future)
         if tasks is None:
             return self._direct_answer(question, route.strategy, context, model)
-        oc = self.config.orchestrator or OrchestratorConfig()
+        policy = self.domain.orchestration
         results = run_workers(
             tasks,
             lambda task: self._worker(question, task, context, model),
-            max_workers=oc.max_workers,
-            timeout=oc.worker_timeout,
+            max_workers=policy.max_workers if policy else 4,
         )
         if all(r.error for r in results):
             return self._direct_answer(question, route.strategy, context, model)
-        return self._aggregate(question, route.strategy, context, results, model)
+        answer = self._aggregate(question, route.strategy, context, results, model)
+        if not (policy and policy.evaluator.enabled):
+            return answer
+        return self._evaluate_loop(
+            question, route.strategy, context, results, answer, model, policy.evaluator
+        )
+
+    def _judge_model(self) -> str:
+        cfg = self.config.evaluation
+        return (cfg.judge_model if cfg and cfg.judge_model else None) or self.config.model
+
+    def _evaluate_loop(
+        self, question: str, strategy: str, context: str,
+        results: list[WorkerResult], answer: str, model: str, evaluator,
+    ) -> str:
+        judge = Judge(self.client, self._judge_model())
+        threshold = evaluator.min_dimension_score
+        for round_no in range(evaluator.max_rounds + 1):
+            scorecard = self._evaluate(judge, question, answer)
+            if scorecard is None:
+                return answer
+            if all(score >= threshold for score in scorecard.values()):
+                return answer
+            if round_no == evaluator.max_rounds:
+                return answer
+            feedback = [f"{dim}: {score}/5" for dim, score in scorecard.items() if score < threshold]
+            try:
+                answer = self._reaggregate(
+                    question, strategy, context, results, answer, feedback, round_no, model
+                )
+            except LLMError:
+                return answer
+        return answer
+
+    def _evaluate(self, judge: Judge, question: str, answer: str) -> dict | None:
+        return judge.score(question, answer)
+
+    def _reaggregate(
+        self, question: str, strategy: str, context: str,
+        results: list[WorkerResult], previous: str, feedback: list[str],
+        round_no: int, model: str,
+    ) -> str:
+        sections = []
+        for r in results:
+            label = f"Sub-task ({r.task.role}): {r.task.title}"
+            if r.error:
+                sections.append(f"{label}\n[worker failed: {r.error}]")
+            else:
+                sections.append(f"{label}\n{r.text}")
+        feedback_lines = "\n".join(f"- {f}" for f in feedback)
+        system = _REAGGREGATE_SYSTEM_PROMPT.format(
+            context=context, feedback_lines=feedback_lines,
+        )
+        user_content = _REAGGREGATE_USER_TEMPLATE.format(
+            question=question,
+            sub_task_sections="\n\n".join(sections),
+            previous=previous,
+        )
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_content},
+        ]
+        return self.client.chat_completion(messages, model=model, disable_thinking=True).text
 
     def _plan(
         self, question: str, strategy: str, context: str, model: str

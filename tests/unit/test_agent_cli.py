@@ -19,16 +19,18 @@ def _write_root_config(tmp_path, domain_dir):
 def _write_domain(tmp_path):
     base = tmp_path / "domain"
     (base / "prompts").mkdir(parents=True)
+    (base / "orchestration.yaml").write_text(
+        "enabled: true\nmin_complexity: complex\nintents:\n  - faq\n",
+        encoding="utf-8",
+    )
     (base / "domain.json").write_text(json.dumps({
         "name": "软件工程", "description": "d", "out_of_domain_reply": "Out.",
     }, ensure_ascii=False), encoding="utf-8")
     (base / "intents.yaml").write_text("- id: faq\n  description: quick\n", encoding="utf-8")
     (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
-    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
     (base / "prompts" / "direct.md").write_text(
         "Direct self-contained", encoding="utf-8"
     )
-    (base / "prompts" / "unsupported_complex.md").write_text("unsupported", encoding="utf-8")
     return str(base)
 
 

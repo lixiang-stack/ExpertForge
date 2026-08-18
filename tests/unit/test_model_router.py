@@ -1,4 +1,4 @@
-from agent.config import AgentConfig, DomainConfig, IntentDef, StrategyDef
+from agent.config import AgentConfig, DomainConfig, IntentDef
 from agent.model_router import resolve_model
 from agent.router import RouteResult
 
@@ -10,19 +10,14 @@ def _config(model_low=None, model_high=None):
     )
 
 
-def _domain(strategy_model=None):
-    strategies = {
-        "direct": StrategyDef("direct", model=strategy_model),
-        "teaching": StrategyDef("teaching"),
-    }
+def _domain():
     return DomainConfig(
         name="sw",
         description="d",
         out_of_domain_reply="Out.",
         intents={"faq": IntentDef("faq", "quick")},
         intent_mapping={"faq": "direct"},
-        strategies=strategies,
-        default_strategy="direct",
+        strategies=["direct", "teaching"],
         prompts={},
     )
 
@@ -63,11 +58,3 @@ def test_none_complexity_uses_model_high():
 def test_medium_missing_model_high_falls_back_to_default():
     result = resolve_model(_config("low-a", None), _domain(), _route(complexity="medium"), "default")
     assert result == "default"
-
-
-def test_strategy_model_overrides_complexity():
-    result = resolve_model(
-        _config("low-a", "high-a"), _domain(strategy_model="strat-a"),
-        _route(complexity="simple"), "default",
-    )
-    assert result == "strat-a"

@@ -15,10 +15,12 @@ def test_main_run_prints_summary_and_writes_file(tmp_path, monkeypatch):
     )
     (domain_dir / "intents.yaml").write_text("- id: faq\n  description: quick\n", encoding="utf-8")
     (domain_dir / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
-    (domain_dir / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
     (domain_dir / "prompts").mkdir()
+    (domain_dir / "orchestration.yaml").write_text(
+        "enabled: true\nmin_complexity: complex\nintents:\n  - faq\n",
+        encoding="utf-8",
+    )
     (domain_dir / "prompts" / "direct.md").write_text("d", encoding="utf-8")
-    (domain_dir / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
 
     dataset_dir = tmp_path / "evaluation" / "datasets"
     dataset_dir.mkdir(parents=True)
@@ -93,10 +95,12 @@ def _suite_cli_env(tmp_path):
     )
     (domain_dir / "intents.yaml").write_text("- id: faq\n  description: quick\n", encoding="utf-8")
     (domain_dir / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
-    (domain_dir / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
     (domain_dir / "prompts").mkdir()
+    (domain_dir / "orchestration.yaml").write_text(
+        "enabled: true\nmin_complexity: complex\nintents:\n  - faq\n",
+        encoding="utf-8",
+    )
     (domain_dir / "prompts" / "direct.md").write_text("d", encoding="utf-8")
-    (domain_dir / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
 
     dataset_dir = tmp_path / "evaluation" / "datasets"
     dataset_dir.mkdir(parents=True)
@@ -373,10 +377,12 @@ def test_main_bad_dataset_returns_1(tmp_path, monkeypatch, capsys):
     )
     (domain_dir / "intents.yaml").write_text("- id: faq\n  description: quick\n", encoding="utf-8")
     (domain_dir / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
-    (domain_dir / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
     (domain_dir / "prompts").mkdir()
+    (domain_dir / "orchestration.yaml").write_text(
+        "enabled: true\nmin_complexity: complex\nintents:\n  - faq\n",
+        encoding="utf-8",
+    )
     (domain_dir / "prompts" / "direct.md").write_text("d", encoding="utf-8")
-    (domain_dir / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
 
     config_dir = tmp_path / "cfg"
     config_dir.mkdir()

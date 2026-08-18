@@ -1,4 +1,4 @@
-from agent.config import AgentConfig, DomainConfig, IntentDef, StrategyDef
+from agent.config import AgentConfig, DomainConfig, IntentDef
 from agent.llm import ChatResult, LLMError
 from agent.repl import run_repl
 
@@ -14,11 +14,9 @@ def _domain():
         out_of_domain_reply="Out of domain.",
         intents={"faq": IntentDef("faq", "quick")},
         intent_mapping={"faq": "direct"},
-        strategies={"direct": StrategyDef("direct", default=True)},
-        default_strategy="direct",
+        strategies=["direct"],
         prompts={
             "direct": "Direct answer prompt.",
-            "unsupported_complex": "unsupported",
         },
     )
 

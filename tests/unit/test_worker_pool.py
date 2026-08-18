@@ -10,7 +10,7 @@ def _tasks(n=4):
 
 
 def test_run_workers_returns_results_in_input_order():
-    results = run_workers(_tasks(3), lambda t: f"out:{t.title}", max_workers=2, timeout=5.0)
+    results = run_workers(_tasks(3), lambda t: f"out:{t.title}", max_workers=2)
     assert [r.task.title for r in results] == ["t0", "t1", "t2"]
     assert all(r.error is None for r in results)
     assert [r.text for r in results] == ["out:t0", "out:t1", "out:t2"]
@@ -31,23 +31,17 @@ def test_run_workers_caps_concurrency():
             active -= 1
         return task.title
 
-    results = run_workers(_tasks(6), run_one, max_workers=2, timeout=5.0)
+    results = run_workers(_tasks(6), run_one, max_workers=2)
     assert max_active <= 2
     assert len(results) == 6
     assert all(r.error is None for r in results)
-
-
-def test_run_workers_worker_timeout_marks_failure():
-    results = run_workers(_tasks(1), lambda t: time.sleep(1.0) or "late", timeout=0.05)
-    assert results[0].text is None
-    assert results[0].error == "timeout"
 
 
 def test_run_workers_exception_captured_not_raised():
     def run_one(task):
         raise ValueError("boom")
 
-    results = run_workers(_tasks(2), run_one, max_workers=2, timeout=5.0)
+    results = run_workers(_tasks(2), run_one, max_workers=2)
     assert [r.error for r in results] == ["boom", "boom"]
     assert all(r.text is None for r in results)
 
@@ -56,7 +50,7 @@ def test_run_workers_all_failed_returns_all_errors():
     def run_one(task):
         raise RuntimeError("x")
 
-    results = run_workers(_tasks(2), run_one, timeout=5.0)
+    results = run_workers(_tasks(2), run_one)
     assert [r.error for r in results] == ["x", "x"]
     assert all(r.text is None for r in results)
 
@@ -68,18 +62,24 @@ def test_run_workers_propagates_caller_context():
     def run_one(task):
         return cv.get()
 
-    results = run_workers(_tasks(1), run_one, timeout=5.0)
+    results = run_workers(_tasks(1), run_one)
     assert results[0].text == "from-caller"
 
 
 def test_run_workers_empty_tasks():
-    assert run_workers([], lambda t: "x", timeout=5.0) == []
+    assert run_workers([], lambda t: "x") == []
+
+
+def test_run_workers_rejects_timeout_parameter():
+    import pytest
+    with pytest.raises(TypeError):
+        run_workers(_tasks(1), lambda t: "x", max_workers=1, timeout=1.0)
 
 
 def test_run_workers_empty_exception_message_uses_repr():
     def run_one(task):
         raise ValueError()
 
-    results = run_workers(_tasks(1), run_one, timeout=5.0)
+    results = run_workers(_tasks(1), run_one)
     assert results[0].text is None
     assert results[0].error == "ValueError()"

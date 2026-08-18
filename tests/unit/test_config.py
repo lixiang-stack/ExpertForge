@@ -7,10 +7,21 @@ from agent.config import (
     ConfigError,
     DomainConfig,
     IntentDef,
-    StrategyDef,
     get_api_key,
     load_config,
     load_domain_config,
+)
+
+ORCHESTRATION_YAML = (
+    "enabled: true\n"
+    "min_complexity: complex\n"
+    "intents:\n"
+    "  - faq\n"
+    "max_workers: 4\n"
+    "evaluator:\n"
+    "  enabled: true\n"
+    "  min_dimension_score: 3\n"
+    "  max_rounds: 1\n"
 )
 
 
@@ -223,6 +234,7 @@ def test_get_api_key_missing(monkeypatch):
 def _write_domain(tmp_path, **overrides):
     base = tmp_path / "domain"
     (base / "prompts").mkdir(parents=True)
+    (base / "orchestration.yaml").write_text(ORCHESTRATION_YAML, encoding="utf-8")
     (base / "domain.json").write_text(json.dumps({
         "name": "软件工程",
         "description": "software engineering",
@@ -236,17 +248,12 @@ def _write_domain(tmp_path, **overrides):
     (base / "intent_mapping.yaml").write_text(
         "concept_explain: teaching\nfaq: direct\n", encoding="utf-8"
     )
-    (base / "strategies.yaml").write_text(
-        "teaching:\n  complexity_gate: true\ndirect:\n  model: model-direct\n  default: true\n",
-        encoding="utf-8",
-    )
     (base / "prompts" / "teaching.md").write_text(
         "teach self-contained", encoding="utf-8"
     )
     (base / "prompts" / "direct.md").write_text(
         "direct self-contained", encoding="utf-8"
     )
-    (base / "prompts" / "unsupported_complex.md").write_text("unsupported", encoding="utf-8")
     return str(base)
 
 
@@ -258,25 +265,23 @@ def test_load_domain_config_basic(tmp_path):
     assert domain.out_of_domain_reply == "Out of domain."
     assert set(domain.intents) == {"concept_explain", "faq"}
     assert domain.intent_mapping == {"concept_explain": "teaching", "faq": "direct"}
-    assert domain.strategies["teaching"].complexity_gate is True
-    assert domain.strategies["direct"].model == "model-direct"
-    assert domain.strategies["direct"].complexity_gate is False
-    assert domain.default_strategy == "direct"
+    assert domain.strategies == ["direct", "teaching"]
     assert "teach self-contained" in domain.prompts["teaching"]
-    assert "unsupported" in domain.prompts["unsupported_complex"]
+    assert domain.orchestration is not None
 
 
 def test_load_domain_config_out_of_domain_reply_default(tmp_path):
     base = tmp_path / "domain"
     (base / "prompts").mkdir(parents=True)
+    (base / "orchestration.yaml").write_text(ORCHESTRATION_YAML, encoding="utf-8")
     (base / "domain.json").write_text(
         json.dumps({"name": "软件工程", "description": "d"}), encoding="utf-8"
     )
-    (base / "intents.yaml").write_text("", encoding="utf-8")
-    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
-    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "intents.yaml").write_text(
+        "- id: faq\n  description: quick question\n", encoding="utf-8"
+    )
+    (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
     (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
-    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
     domain = load_domain_config(str(base))
     assert domain.out_of_domain_reply == (
         "This question falls outside my expert domain (软件工程) "
@@ -297,8 +302,6 @@ def test_load_domain_config_bad_yaml(tmp_path):
     )
     (base / "intents.yaml").write_text(":: not: [valid", encoding="utf-8")
     (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
-    (base / "strategies.yaml").write_text("", encoding="utf-8")
-    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
     with pytest.raises(ConfigError):
         load_domain_config(str(base))
 
@@ -309,14 +312,15 @@ from agent.config import ComplexityPolicy
 def test_load_domain_config_complexity_policy(tmp_path):
     base = tmp_path / "domain"
     (base / "prompts").mkdir(parents=True)
+    (base / "orchestration.yaml").write_text(ORCHESTRATION_YAML, encoding="utf-8")
     (base / "domain.json").write_text(
         json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
     )
-    (base / "intents.yaml").write_text("", encoding="utf-8")
-    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
-    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "intents.yaml").write_text(
+        "- id: faq\n  description: quick question\n", encoding="utf-8"
+    )
+    (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
     (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
-    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
     (base / "complexity.yaml").write_text(
         "- level: simple\n"
         "  description: single concept\n"
@@ -350,14 +354,15 @@ def test_load_domain_config_complexity_policy(tmp_path):
 def test_load_domain_config_complexity_missing_is_none(tmp_path):
     base = tmp_path / "domain"
     (base / "prompts").mkdir(parents=True)
+    (base / "orchestration.yaml").write_text(ORCHESTRATION_YAML, encoding="utf-8")
     (base / "domain.json").write_text(
         json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
     )
-    (base / "intents.yaml").write_text("", encoding="utf-8")
-    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
-    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "intents.yaml").write_text(
+        "- id: faq\n  description: quick question\n", encoding="utf-8"
+    )
+    (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
     (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
-    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
     domain = load_domain_config(str(base))
     assert domain.complexity is None
 
@@ -365,14 +370,15 @@ def test_load_domain_config_complexity_missing_is_none(tmp_path):
 def test_load_domain_config_complexity_invalid_level(tmp_path):
     base = tmp_path / "domain"
     (base / "prompts").mkdir(parents=True)
+    (base / "orchestration.yaml").write_text(ORCHESTRATION_YAML, encoding="utf-8")
     (base / "domain.json").write_text(
         json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
     )
-    (base / "intents.yaml").write_text("", encoding="utf-8")
-    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
-    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "intents.yaml").write_text(
+        "- id: faq\n  description: quick question\n", encoding="utf-8"
+    )
+    (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
     (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
-    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
     (base / "complexity.yaml").write_text("- level: bogus\n  description: d\n",
                                           encoding="utf-8")
     with pytest.raises(ConfigError):
@@ -382,14 +388,15 @@ def test_load_domain_config_complexity_invalid_level(tmp_path):
 def test_load_domain_config_complexity_incomplete_levels_raises(tmp_path):
     base = tmp_path / "domain"
     (base / "prompts").mkdir(parents=True)
+    (base / "orchestration.yaml").write_text(ORCHESTRATION_YAML, encoding="utf-8")
     (base / "domain.json").write_text(
         json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
     )
-    (base / "intents.yaml").write_text("", encoding="utf-8")
-    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
-    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "intents.yaml").write_text(
+        "- id: faq\n  description: quick question\n", encoding="utf-8"
+    )
+    (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
     (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
-    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
     (base / "complexity.yaml").write_text(
         "- level: simple\n  description: d\n"
         "- level: medium\n  description: d\n",
@@ -402,14 +409,15 @@ def test_load_domain_config_complexity_incomplete_levels_raises(tmp_path):
 def test_load_domain_config_complexity_reordered_raises(tmp_path):
     base = tmp_path / "domain"
     (base / "prompts").mkdir(parents=True)
+    (base / "orchestration.yaml").write_text(ORCHESTRATION_YAML, encoding="utf-8")
     (base / "domain.json").write_text(
         json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
     )
-    (base / "intents.yaml").write_text("", encoding="utf-8")
-    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
-    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "intents.yaml").write_text(
+        "- id: faq\n  description: quick question\n", encoding="utf-8"
+    )
+    (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
     (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
-    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
     (base / "complexity.yaml").write_text(
         "- level: complex\n  description: d\n"
         "- level: medium\n  description: d\n"
@@ -423,14 +431,15 @@ def test_load_domain_config_complexity_reordered_raises(tmp_path):
 def test_load_domain_config_complexity_non_list_raises(tmp_path):
     base = tmp_path / "domain"
     (base / "prompts").mkdir(parents=True)
+    (base / "orchestration.yaml").write_text(ORCHESTRATION_YAML, encoding="utf-8")
     (base / "domain.json").write_text(
         json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
     )
-    (base / "intents.yaml").write_text("", encoding="utf-8")
-    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
-    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "intents.yaml").write_text(
+        "- id: faq\n  description: quick question\n", encoding="utf-8"
+    )
+    (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
     (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
-    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
     (base / "complexity.yaml").write_text("not_a_list: true\n", encoding="utf-8")
     with pytest.raises(ConfigError):
         load_domain_config(str(base))
@@ -439,14 +448,15 @@ def test_load_domain_config_complexity_non_list_raises(tmp_path):
 def test_load_domain_config_complexity_missing_level_raises(tmp_path):
     base = tmp_path / "domain"
     (base / "prompts").mkdir(parents=True)
+    (base / "orchestration.yaml").write_text(ORCHESTRATION_YAML, encoding="utf-8")
     (base / "domain.json").write_text(
         json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
     )
-    (base / "intents.yaml").write_text("", encoding="utf-8")
-    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
-    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "intents.yaml").write_text(
+        "- id: faq\n  description: quick question\n", encoding="utf-8"
+    )
+    (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
     (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
-    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
     (base / "complexity.yaml").write_text("- description: d\n", encoding="utf-8")
     with pytest.raises(ConfigError):
         load_domain_config(str(base))
@@ -455,14 +465,15 @@ def test_load_domain_config_complexity_missing_level_raises(tmp_path):
 def test_load_domain_config_expert_policy(tmp_path):
     base = tmp_path / "domain"
     (base / "prompts").mkdir(parents=True)
+    (base / "orchestration.yaml").write_text(ORCHESTRATION_YAML, encoding="utf-8")
     (base / "domain.json").write_text(
         json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
     )
-    (base / "intents.yaml").write_text("", encoding="utf-8")
-    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
-    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "intents.yaml").write_text(
+        "- id: faq\n  description: quick question\n", encoding="utf-8"
+    )
+    (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
     (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
-    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
     (base / "expert_policy.md").write_text(
         "You are a Senior Software Engineering Expert.", encoding="utf-8"
     )
@@ -473,14 +484,15 @@ def test_load_domain_config_expert_policy(tmp_path):
 def test_load_domain_config_expert_policy_missing_is_empty(tmp_path):
     base = tmp_path / "domain"
     (base / "prompts").mkdir(parents=True)
+    (base / "orchestration.yaml").write_text(ORCHESTRATION_YAML, encoding="utf-8")
     (base / "domain.json").write_text(
         json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
     )
-    (base / "intents.yaml").write_text("", encoding="utf-8")
-    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
-    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "intents.yaml").write_text(
+        "- id: faq\n  description: quick question\n", encoding="utf-8"
+    )
+    (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
     (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
-    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
     domain = load_domain_config(str(base))
     assert domain.expert_policy == ""
 
@@ -488,14 +500,15 @@ def test_load_domain_config_expert_policy_missing_is_empty(tmp_path):
 def test_load_domain_config_expert_policy_empty_is_empty(tmp_path):
     base = tmp_path / "domain"
     (base / "prompts").mkdir(parents=True)
+    (base / "orchestration.yaml").write_text(ORCHESTRATION_YAML, encoding="utf-8")
     (base / "domain.json").write_text(
         json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
     )
-    (base / "intents.yaml").write_text("", encoding="utf-8")
-    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
-    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "intents.yaml").write_text(
+        "- id: faq\n  description: quick question\n", encoding="utf-8"
+    )
+    (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
     (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
-    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
     (base / "expert_policy.md").write_text("", encoding="utf-8")
     domain = load_domain_config(str(base))
     assert domain.expert_policy == ""
@@ -504,63 +517,66 @@ def test_load_domain_config_expert_policy_empty_is_empty(tmp_path):
 def test_load_domain_config_mapping_unknown_intent(tmp_path):
     base = tmp_path / "domain"
     (base / "prompts").mkdir(parents=True)
+    (base / "orchestration.yaml").write_text(ORCHESTRATION_YAML, encoding="utf-8")
     (base / "domain.json").write_text(
         json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
     )
     (base / "intents.yaml").write_text("- id: faq\n  description: q\n", encoding="utf-8")
     (base / "intent_mapping.yaml").write_text("bogus_intent: direct\n", encoding="utf-8")
-    (base / "strategies.yaml").write_text("direct:\n", encoding="utf-8")
     (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
-    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
     with pytest.raises(ConfigError):
         load_domain_config(str(base))
 
 
-def test_load_domain_config_missing_prompt(tmp_path):
+def test_load_domain_config_mapping_unknown_strategy_raises(tmp_path):
     base = tmp_path / "domain"
     (base / "prompts").mkdir(parents=True)
+    (base / "orchestration.yaml").write_text(ORCHESTRATION_YAML, encoding="utf-8")
     (base / "domain.json").write_text(
         json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
     )
     (base / "intents.yaml").write_text("- id: faq\n  description: q\n", encoding="utf-8")
     (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
-    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
-    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
+    (base / "prompts" / "teaching.md").write_text("t", encoding="utf-8")
     with pytest.raises(ConfigError) as exc_info:
         load_domain_config(str(base))
-    assert "unsupported_complex.md" in str(exc_info.value)
+    assert "references unknown strategy" in str(exc_info.value)
+    assert "direct" in str(exc_info.value)
 
 
-def _write_domain_with_default(tmp_path, strategies_yaml):
+def test_load_domain_config_strategies_derived_from_prompts(tmp_path):
     base = tmp_path / "domain"
     (base / "prompts").mkdir(parents=True)
-    (base / "domain.json").write_text(json.dumps({
-        "name": "x", "description": "d",
-    }), encoding="utf-8")
-    (base / "intents.yaml").write_text("", encoding="utf-8")
-    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
-    (base / "strategies.yaml").write_text(strategies_yaml, encoding="utf-8")
+    (base / "domain.json").write_text(
+        json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text(
+        "- id: faq\n  description: quick question\n", encoding="utf-8"
+    )
+    (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
+    (base / "orchestration.yaml").write_text(ORCHESTRATION_YAML, encoding="utf-8")
     (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
-    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
-    return str(base)
+    (base / "prompts" / "teaching.md").write_text("t", encoding="utf-8")
+    domain = load_domain_config(str(base))
+    assert domain.strategies == ["direct", "teaching"]
 
 
-def test_load_domain_config_resolves_default_strategy(tmp_path):
-    domain = load_domain_config(_write_domain_with_default(
-        tmp_path, "direct:\n  default: true\n"))
-    assert domain.default_strategy == "direct"
-    assert domain.strategies["direct"].default is True
-
-
-def test_load_domain_config_zero_defaults_raises(tmp_path):
+def test_load_domain_config_unmapped_intent_raises(tmp_path):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(
+        json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text(
+        "- id: faq\n  description: quick question\n"
+        "- id: tutorial\n  description: walkthrough\n",
+        encoding="utf-8",
+    )
+    (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
+    (base / "orchestration.yaml").write_text(ORCHESTRATION_YAML, encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
     with pytest.raises(ConfigError):
-        load_domain_config(_write_domain_with_default(tmp_path, "direct:\n"))
-
-
-def test_load_domain_config_multiple_defaults_raises(tmp_path):
-    with pytest.raises(ConfigError):
-        load_domain_config(_write_domain_with_default(
-            tmp_path, "direct:\n  default: true\nteaching:\n  default: true\n"))
+        load_domain_config(str(base))
 
 
 def test_load_config_without_observability(tmp_path, monkeypatch):
@@ -657,6 +673,7 @@ def test_load_config_evaluation_ignores_non_dict(tmp_path, monkeypatch):
 def test_load_domain_config_intent_definition_fields(tmp_path):
     base = tmp_path / "domain"
     (base / "prompts").mkdir(parents=True)
+    (base / "orchestration.yaml").write_text(ORCHESTRATION_YAML, encoding="utf-8")
     (base / "domain.json").write_text(
         json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
     )
@@ -668,13 +685,15 @@ def test_load_domain_config_intent_definition_fields(tmp_path):
         "  negative_examples:\n"
         "    - My app crashes.\n"
         "  boundaries:\n"
-        "    - Prefer concept_explain over faq when the user wants understanding.\n",
+        "    - Prefer concept_explain over faq when the user wants understanding.\n"
+        "- id: faq\n"
+        "  description: quick question\n",
         encoding="utf-8",
     )
-    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
-    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "intent_mapping.yaml").write_text(
+        "concept_explain: direct\nfaq: direct\n", encoding="utf-8"
+    )
     (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
-    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
     domain = load_domain_config(str(base))
     intent = domain.intents["concept_explain"]
     assert intent.positive_examples == ["Why does DI reduce coupling?"]
@@ -687,71 +706,20 @@ def test_load_domain_config_intent_definition_fields(tmp_path):
 def test_load_domain_config_intent_fields_default_empty(tmp_path):
     base = tmp_path / "domain"
     (base / "prompts").mkdir(parents=True)
+    (base / "orchestration.yaml").write_text(ORCHESTRATION_YAML, encoding="utf-8")
     (base / "domain.json").write_text(
         json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
     )
     (base / "intents.yaml").write_text(
         "- id: faq\n  description: quick question\n", encoding="utf-8"
     )
-    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
-    (base / "strategies.yaml").write_text("direct:\n  default: true\n", encoding="utf-8")
+    (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
     (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
-    (base / "prompts" / "unsupported_complex.md").write_text("u", encoding="utf-8")
     domain = load_domain_config(str(base))
     intent = domain.intents["faq"]
     assert intent.positive_examples == []
     assert intent.negative_examples == []
     assert intent.boundaries == []
-
-
-def test_load_config_orchestrator_parsed(tmp_path, monkeypatch):
-    monkeypatch.setenv("AGENT_API_KEY", "k")
-    path = _write_config(tmp_path, {
-        "base_url": "https://api.example.com/v1",
-        "model": "model-a",
-        "domain_dir": "domain/software_engineering",
-        "orchestrator": {"max_workers": 8, "worker_timeout": 90},
-    })
-    cfg = load_config(path)
-    assert cfg.orchestrator is not None
-    assert cfg.orchestrator.max_workers == 8
-    assert cfg.orchestrator.worker_timeout == 90
-
-
-def test_load_config_orchestrator_none_when_missing(tmp_path, monkeypatch):
-    monkeypatch.setenv("AGENT_API_KEY", "k")
-    path = _write_config(tmp_path, {
-        "base_url": "https://api.example.com/v1",
-        "model": "model-a",
-        "domain_dir": "domain/software_engineering",
-    })
-    cfg = load_config(path)
-    assert cfg.orchestrator is None
-
-
-def test_load_config_orchestrator_invalid_values_default(tmp_path, monkeypatch):
-    monkeypatch.setenv("AGENT_API_KEY", "k")
-    path = _write_config(tmp_path, {
-        "base_url": "https://api.example.com/v1",
-        "model": "model-a",
-        "domain_dir": "domain/software_engineering",
-        "orchestrator": {"max_workers": 0, "worker_timeout": -5},
-    })
-    cfg = load_config(path)
-    assert cfg.orchestrator.max_workers == 4
-    assert cfg.orchestrator.worker_timeout == 120.0
-
-
-def test_load_config_orchestrator_non_dict_ignored(tmp_path, monkeypatch):
-    monkeypatch.setenv("AGENT_API_KEY", "k")
-    path = _write_config(tmp_path, {
-        "base_url": "https://api.example.com/v1",
-        "model": "model-a",
-        "domain_dir": "domain/software_engineering",
-        "orchestrator": "nope",
-    })
-    cfg = load_config(path)
-    assert cfg.orchestrator is None
 
 
 def test_load_config_timeout_default_is_none(tmp_path, monkeypatch):
@@ -857,3 +825,103 @@ def test_load_config_non_boolean_capability_raises(tmp_path, monkeypatch):
     }), encoding="utf-8")
     with pytest.raises(ConfigError):
         load_config(str(path))
+
+
+def test_load_domain_config_orchestration_policy(tmp_path):
+    domain = load_domain_config(_write_domain(tmp_path))
+    oc = domain.orchestration
+    assert oc is not None
+    assert oc.enabled is True
+    assert oc.min_complexity == "complex"
+    assert oc.intents == ["faq"]
+    assert oc.max_workers == 4
+    assert oc.evaluator.enabled is True
+    assert oc.evaluator.min_dimension_score == 3
+    assert oc.evaluator.max_rounds == 1
+
+
+def test_load_domain_config_orchestration_missing_raises(tmp_path):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(
+        json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text("", encoding="utf-8")
+    (base / "intent_mapping.yaml").write_text("", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_domain_config(str(base))
+
+
+def test_load_domain_config_orchestration_empty_intents_raises(tmp_path):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(
+        json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text(
+        "- id: faq\n  description: quick question\n", encoding="utf-8"
+    )
+    (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
+    (base / "orchestration.yaml").write_text(
+        "enabled: true\nmin_complexity: complex\nintents: []\n", encoding="utf-8"
+    )
+    with pytest.raises(ConfigError):
+        load_domain_config(str(base))
+
+
+def test_load_domain_config_orchestration_unknown_intent_raises(tmp_path):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(
+        json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text(
+        "- id: faq\n  description: quick question\n", encoding="utf-8"
+    )
+    (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
+    (base / "orchestration.yaml").write_text(
+        "enabled: true\nmin_complexity: complex\nintents:\n  - bogus\n", encoding="utf-8"
+    )
+    with pytest.raises(ConfigError):
+        load_domain_config(str(base))
+
+
+def test_load_domain_config_orchestration_bad_min_complexity_raises(tmp_path):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(
+        json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text(
+        "- id: faq\n  description: quick question\n", encoding="utf-8"
+    )
+    (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
+    (base / "orchestration.yaml").write_text(
+        "enabled: true\nmin_complexity: impossible\nintents:\n  - faq\n", encoding="utf-8"
+    )
+    with pytest.raises(ConfigError):
+        load_domain_config(str(base))
+
+
+def test_load_domain_config_orchestration_bad_evaluator_raises(tmp_path):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "domain.json").write_text(
+        json.dumps({"name": "x", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text(
+        "- id: faq\n  description: quick question\n", encoding="utf-8"
+    )
+    (base / "intent_mapping.yaml").write_text("faq: direct\n", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("d", encoding="utf-8")
+    (base / "orchestration.yaml").write_text(
+        "enabled: true\nmin_complexity: complex\nintents:\n  - faq\n"
+        "evaluator:\n  enabled: true\n  min_dimension_score: 9\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError):
+        load_domain_config(str(base))

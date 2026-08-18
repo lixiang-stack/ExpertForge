@@ -3,7 +3,14 @@ import threading
 import pytest
 
 from agent.chat import Chat
-from agent.config import AgentConfig, DomainConfig, IntentDef, ObservabilityConfig, StrategyDef
+from agent.config import (
+    AgentConfig,
+    DomainConfig,
+    EvaluatorPolicy,
+    IntentDef,
+    ObservabilityConfig,
+    OrchestrationPolicy,
+)
 from agent.llm import ChatResult, LLMError
 from agent.observability import patch as patch_mod
 from agent.observability.client import TracedLLMClient
@@ -61,13 +68,12 @@ def _domain():
         name="sw", description="desc", out_of_domain_reply="Out.",
         intents={"faq": IntentDef("faq", "quick")},
         intent_mapping={"faq": "direct"},
-        strategies={"direct": StrategyDef("direct", default=True)},
-        default_strategy="direct",
-        prompts={"direct": "Direct prompt.", "unsupported_complex": "x."},
+        strategies=["direct"],
+        prompts={"direct": "Direct prompt."},
     )
 
 
-def _domain_complex():
+def _domain_complex(evaluator=None):
     return DomainConfig(
         name="sw", description="desc", out_of_domain_reply="Out.",
         intents={
@@ -75,15 +81,15 @@ def _domain_complex():
             "troubleshooting": IntentDef("troubleshooting", "debug"),
         },
         intent_mapping={"faq": "direct", "troubleshooting": "debugging"},
-        strategies={
-            "direct": StrategyDef("direct", default=True),
-            "debugging": StrategyDef("debugging", complexity_gate=True),
-        },
-        default_strategy="direct",
+        strategies=["direct", "debugging"],
+        orchestration=OrchestrationPolicy(
+            enabled=True, min_complexity="complex", intents=["troubleshooting"],
+            max_workers=4,
+            evaluator=evaluator or EvaluatorPolicy(enabled=False),
+        ),
         prompts={
             "direct": "Direct prompt.",
             "debugging": "Debugging prompt.",
-            "unsupported_complex": "x.",
         },
     )
 
@@ -213,3 +219,44 @@ def test_orchestration_worker_failure_recorded(tmp_path):
     errors = [e["data"].get("error") for e in worker_decisions]
     assert len(errors) == 2
     assert errors.count(None) == 1 and errors.count("worker boom") == 1
+
+
+_SCORECARD_LOW = ('{"correctness": 2, "relevance": 4, "completeness": 4, '
+                  '"technical_depth": 4, "practical_usefulness": 4, "hallucination": 4}')
+_SCORECARD_PASS = ('{"correctness": 4, "relevance": 4, "completeness": 4, '
+                   '"technical_depth": 4, "practical_usefulness": 4, "hallucination": 4}')
+
+
+def test_orchestration_evaluator_and_optimizer_recorded(tmp_path):
+    store = _store(tmp_path)
+    inner = FakeInner([_CLASSIFY_COMPLEX, _PLAN, "w1", "w2", "draft",
+                       _SCORECARD_LOW, "improved", _SCORECARD_PASS])
+    chat = Chat(inner, _config(), _domain_complex(
+        evaluator=EvaluatorPolicy(enabled=True, min_dimension_score=3, max_rounds=1)))
+    patch_mod.Installed(store, {}).apply()
+    resp = chat.respond("huge debugging task")
+    assert resp.text == "improved"
+    events, _ = read_events(tmp_path / "obs")
+    eval_events = [e for e in events
+                   if e["type"] == "decision" and e["phase"] == "orchestration.evaluator"]
+    opt_events = [e for e in events
+                  if e["type"] == "decision" and e["phase"] == "orchestration.optimizer"]
+    assert len(eval_events) == 2
+    assert eval_events[0]["data"]["passed"] is False
+    assert eval_events[1]["data"]["passed"] is True
+    assert len(opt_events) == 1
+    assert opt_events[0]["data"]["round"] == 0
+    assert "correctness: 2/5" in opt_events[0]["data"]["feedback"]
+
+
+def test_orchestration_aggregate_records_evaluated_flag(tmp_path):
+    store = _store(tmp_path)
+    inner = FakeInner([_CLASSIFY_COMPLEX, _PLAN, "w1", "w2", "final"])
+    chat = Chat(inner, _config(), _domain_complex())
+    patch_mod.Installed(store, {}).apply()
+    resp = chat.respond("huge debugging task")
+    assert resp.text == "final"
+    events, _ = read_events(tmp_path / "obs")
+    agg = [e for e in events
+           if e["type"] == "decision" and e["phase"] == "orchestration.aggregate"][0]
+    assert agg["data"]["evaluated"] is False

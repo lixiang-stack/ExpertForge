@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-from agent.config import ConfigError, effective_timeout, get_api_key, load_config, load_domain_config
+from agent.config import ConfigError, get_api_key, load_config, load_domain_config
 from agent.llm import LLMClient
 
 from .dataset import DatasetError, Suite, load_suites
@@ -46,7 +46,7 @@ def _cmd_run(args) -> int:
         suites = [Suite(name=s.name, domain=s.domain, cases=s.cases[:args.max_per_suite])
                   for s in suites]
     client = LLMClient(base_url=config.base_url, api_key=api_key, model=config.model,
-                       timeout=effective_timeout(config),
+                       timeout=config.timeout,
                        provider=config.provider,
                        capability_overrides=config.provider_capabilities)
     results_by_suite: dict[str, list] = {}

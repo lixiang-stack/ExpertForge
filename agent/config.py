@@ -34,12 +34,6 @@ class EvaluationConfig:
 
 
 @dataclass
-class OrchestratorConfig:
-    max_workers: int = 4
-    worker_timeout: float = 120.0
-
-
-@dataclass
 class AgentConfig:
     base_url: str
     model: str
@@ -52,7 +46,6 @@ class AgentConfig:
     provider_capabilities: dict[str, bool] = field(default_factory=dict)
     observability: ObservabilityConfig | None = None
     evaluation: EvaluationConfig | None = None
-    orchestrator: OrchestratorConfig | None = None
 
 
 def _read_json_file(path: str) -> dict:
@@ -129,18 +122,6 @@ def load_config(path: str | None = None) -> AgentConfig:
             results_dir=results_dir if isinstance(results_dir, str) else "evaluation/results",
         )
 
-    raw_orch = raw.get("orchestrator")
-    orchestrator = None
-    if isinstance(raw_orch, dict):
-        max_workers = raw_orch.get("max_workers")
-        worker_timeout = raw_orch.get("worker_timeout")
-        orchestrator = OrchestratorConfig(
-            max_workers=max_workers if isinstance(max_workers, int) and max_workers > 0 else 4,
-            worker_timeout=worker_timeout
-            if isinstance(worker_timeout, (int, float)) and worker_timeout > 0
-            else 120.0,
-        )
-
     provider = raw.get("provider")
     if not isinstance(provider, str) or not provider:
         raise ConfigError("Missing 'provider' in config (e.g. 'deepseek' or 'gemini').")
@@ -172,23 +153,7 @@ def load_config(path: str | None = None) -> AgentConfig:
         provider_capabilities=provider_capabilities,
         observability=observability,
         evaluation=evaluation,
-        orchestrator=orchestrator,
     )
-
-
-def effective_timeout(config: AgentConfig) -> float | None:
-    """Client timeout for LLM calls, derived from config only.
-
-    ``None`` leaves the OpenAI SDK default in place. When an orchestrator
-    worker timeout is configured, the client timeout never falls below it so
-    the worker pool's wall-clock limit governs workers instead of the client.
-    """
-    worker = config.orchestrator.worker_timeout if config.orchestrator else 0.0
-    if config.timeout is not None:
-        return max(config.timeout, worker)
-    if worker > 0:
-        return worker
-    return None
 
 
 def get_api_key() -> str:
@@ -226,11 +191,19 @@ class ComplexityPolicy:
 
 
 @dataclass
-class StrategyDef:
-    id: str
-    model: str | None = None
-    complexity_gate: bool = False
-    default: bool = False
+class EvaluatorPolicy:
+    enabled: bool = True
+    min_dimension_score: int = 3
+    max_rounds: int = 1
+
+
+@dataclass
+class OrchestrationPolicy:
+    enabled: bool = True
+    min_complexity: str = "complex"
+    intents: list[str] = field(default_factory=list)
+    max_workers: int = 4
+    evaluator: EvaluatorPolicy = field(default_factory=EvaluatorPolicy)
 
 
 @dataclass
@@ -240,11 +213,11 @@ class DomainConfig:
     out_of_domain_reply: str
     intents: dict[str, IntentDef]
     intent_mapping: dict[str, str]
-    strategies: dict[str, StrategyDef]
-    default_strategy: str
+    strategies: list[str]
     prompts: dict[str, str]
     complexity: ComplexityPolicy | None = None
     expert_policy: str = ""
+    orchestration: OrchestrationPolicy | None = None
 
 
 def _read_json(path: Path) -> dict:
@@ -312,6 +285,45 @@ def load_domain_config(domain_dir: str) -> DomainConfig:
             boundaries=_str_list(item.get("boundaries")),
         )
 
+    orchestration = None
+    orch_path = base / "orchestration.yaml"
+    if not orch_path.is_file():
+        raise ConfigError(f"orchestration.yaml not found: {orch_path}")
+    orch_data = _read_yaml(orch_path)
+    if not isinstance(orch_data, dict):
+        raise ConfigError(f"orchestration.yaml must contain a mapping: {orch_path}")
+    orch_intents = orch_data.get("intents")
+    if not isinstance(orch_intents, list) or not orch_intents:
+        raise ConfigError(f"orchestration.yaml 'intents' must be a non-empty list: {orch_path}")
+    if not all(isinstance(i, str) and i in intents for i in orch_intents):
+        raise ConfigError(f"orchestration.yaml 'intents' references unknown intent: {orch_path}")
+    min_complexity = orch_data.get("min_complexity", "complex")
+    if min_complexity not in COMPLEXITY_LEVELS:
+        raise ConfigError(f"Unknown 'min_complexity' {min_complexity!r} in {orch_path}")
+    max_workers = orch_data.get("max_workers", 4)
+    if not isinstance(max_workers, int) or max_workers <= 0:
+        raise ConfigError(f"orchestration.yaml 'max_workers' must be a positive int: {orch_path}")
+    ev = orch_data.get("evaluator") or {}
+    if not isinstance(ev, dict):
+        raise ConfigError(f"orchestration.yaml 'evaluator' must be a mapping: {orch_path}")
+    min_score = ev.get("min_dimension_score", 3)
+    max_rounds = ev.get("max_rounds", 1)
+    if not isinstance(min_score, int) or not 1 <= min_score <= 5:
+        raise ConfigError(f"orchestration.yaml 'min_dimension_score' must be an int in 1..5: {orch_path}")
+    if not isinstance(max_rounds, int) or max_rounds < 0:
+        raise ConfigError(f"orchestration.yaml 'max_rounds' must be a non-negative int: {orch_path}")
+    orchestration = OrchestrationPolicy(
+        enabled=bool(orch_data.get("enabled", True)),
+        min_complexity=min_complexity,
+        intents=orch_intents,
+        max_workers=max_workers,
+        evaluator=EvaluatorPolicy(
+            enabled=bool(ev.get("enabled", True)),
+            min_dimension_score=min_score,
+            max_rounds=max_rounds,
+        ),
+    )
+
     complexity = None
     complexity_path = base / "complexity.yaml"
     if complexity_path.is_file():
@@ -362,48 +374,25 @@ def load_domain_config(domain_dir: str) -> DomainConfig:
             )
         intent_mapping[intent_id] = strategy_id
 
-    strategies_data = _read_yaml(base / "strategies.yaml")
-    if strategies_data is None:
-        strategies_data = {}
-    if not isinstance(strategies_data, dict):
-        raise ConfigError(f"strategies.yaml must contain a mapping: {base / 'strategies.yaml'}")
-    strategies: dict[str, StrategyDef] = {}
-    configured_default = None
-    for sid, item in strategies_data.items():
-        if isinstance(item, dict):
-            model = item.get("model")
-            strategies[sid] = StrategyDef(
-                id=sid,
-                model=model if isinstance(model, str) and model else None,
-                complexity_gate=bool(item.get("complexity_gate", False)),
-                default=bool(item.get("default", False)),
+    for intent_id in intents:
+        if intent_id not in intent_mapping:
+            raise ConfigError(
+                f"intent_mapping.yaml is missing a strategy for intent '{intent_id}'"
             )
-            if item.get("default"):
-                configured_default = sid
-        else:
-            strategies[sid] = StrategyDef(id=sid)
 
+    prompt_dir = base / "prompts"
+    strategies = sorted(p.stem for p in prompt_dir.glob("*.md"))
+    if not strategies:
+        raise ConfigError(f"No strategy prompt files found in {prompt_dir}")
+    prompts: dict[str, str] = {}
+    for sid in strategies:
+        prompts[sid] = _read_prompt(prompt_dir / f"{sid}.md")
     for intent_id, strategy_id in intent_mapping.items():
         if strategy_id not in strategies:
             raise ConfigError(
                 f"Mapping for intent '{intent_id}' references unknown strategy "
-                f"'{strategy_id}' in {base / 'intent_mapping.yaml'}"
+                f"'{strategy_id}': no {strategy_id}.md in {prompt_dir}"
             )
-
-    if configured_default is None:
-        raise ConfigError(
-            f"Exactly one strategy in {base / 'strategies.yaml'} must have default: true"
-        )
-    if sum(1 for sdef in strategies.values() if sdef.default) != 1:
-        raise ConfigError(
-            f"Only one strategy in {base / 'strategies.yaml'} may have default: true"
-        )
-
-    prompts: dict[str, str] = {}
-    prompt_dir = base / "prompts"
-    for sid in strategies:
-        prompts[sid] = _read_prompt(prompt_dir / f"{sid}.md")
-    prompts["unsupported_complex"] = _read_prompt(prompt_dir / "unsupported_complex.md")
 
     expert_policy = ""
     expert_policy_path = base / "expert_policy.md"
@@ -417,8 +406,8 @@ def load_domain_config(domain_dir: str) -> DomainConfig:
         intents=intents,
         intent_mapping=intent_mapping,
         strategies=strategies,
-        default_strategy=configured_default,
         prompts=prompts,
         complexity=complexity,
         expert_policy=expert_policy,
+        orchestration=orchestration,
     )

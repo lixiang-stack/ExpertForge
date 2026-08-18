@@ -20,8 +20,7 @@ def _domain():
             "faq": IntentDef("faq", "quick factual question"),
         },
         intent_mapping={},
-        strategies={},
-        default_strategy="none",
+        strategies=[],
         prompts={},
     )
 

@@ -45,10 +45,12 @@ Each expert domain lives in its own directory, e.g. `domain/software_engineering
 
 - `domain.json`: domain name, description, and out-of-domain reply.
 - `intents.yaml`: the intents the classifier can detect.
-- `intent_mapping.yaml`: maps each intent to a strategy.
-- `strategies.yaml`: strategy definitions — per-strategy optional `model`,
-  `complexity_gate`, and exactly one `default: true` marker (the strategy used for
-  unmapped intents).
+- `intent_mapping.yaml`: maps each intent to a strategy (every intent in
+  `intents.yaml` must be mapped — there is no default fallback).
+- `orchestration.yaml`: required per domain — `enabled`, `min_complexity`
+  (`simple`, `medium`, or `complex`), `intents` (each must exist in
+  `intents.yaml`), `max_workers`, and `evaluator` (`enabled`,
+  `min_dimension_score`, `max_rounds`).
 - `expert_policy.md`: the shared expert identity and answer policy, prepended to
   the system prompt at runtime.
 - `prompts/*.md`: one system prompt per strategy. Each file carries only the
@@ -57,9 +59,10 @@ Each expert domain lives in its own directory, e.g. `domain/software_engineering
   placeholders (`{name}`/`{description}`/`{structure}`).
 
 Strategies are fully data-driven: swapping in a new expert domain means writing a new
-domain directory — no code changes. Complex questions on a gated strategy run through
-an Orchestrator pipeline (Planner → Workers → Aggregator) that builds on the strategy
-prompt.
+domain directory — no code changes. When `orchestration.yaml` has `enabled: true`,
+the router sends a question through an Orchestrator pipeline (Planner → Workers →
+Aggregator) when the question's complexity rank is at least `min_complexity` and its
+intent is listed in `intents`; otherwise the strategy answers directly.
 
 ## Run
 

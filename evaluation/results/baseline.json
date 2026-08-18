@@ -1,8 +1,8 @@
 {
   "domain": "software_engineering",
-  "label": "feat_expert-policy-strategy-prompts",
+  "label": "feat_orchestration-policy.deepseek",
   "model": "deepseek-v4-flash",
-  "judge_model": "deepseek-v4-pro",
+  "judge_model": "deepseek-v4-flash",
   "skip_quality": false,
   "dataset": "evaluation/datasets/software_engineering",
   "suites": [
@@ -17,16 +17,17 @@
   ],
   "metrics": {
     "n_cases": 33,
+    "n_failed": 0,
     "classification": {
       "domain_accuracy": 1.0,
-      "intent_accuracy": 0.9375,
+      "intent_accuracy": 0.9062,
       "complexity_accuracy": 0.8438,
       "per_intent": {
         "performance_analysis": 1.0,
         "architecture_design": 0.8,
         "comparison": 1.0,
         "faq": 1.0,
-        "troubleshooting": 1.0,
+        "troubleshooting": 0.8333,
         "concept_explain": 0.6667,
         "tutorial": 1.0,
         "learning_guide": 1.0,
@@ -41,56 +42,57 @@
       }
     },
     "routing": {
-      "strategy_accuracy": 1.0,
+      "strategy_accuracy": 0.9697,
       "orchestration_accuracy": 0.9697,
       "model_routing_accuracy": 1.0
     },
     "answer_quality": {
-      "correctness": 4.94,
+      "correctness": 4.9,
       "relevance": 5.0,
-      "completeness": 4.9,
-      "technical_depth": 4.65,
-      "practical_usefulness": 5.0,
-      "hallucination": 4.94
+      "completeness": 4.97,
+      "technical_depth": 4.71,
+      "practical_usefulness": 4.97,
+      "hallucination": 4.9
     },
     "cost": {
       "by_path": {
         "medium": {
           "llm_calls": 51,
-          "in_tokens": 62978,
-          "out_tokens": 71404,
-          "total_tokens": 134382,
-          "cache_tokens": 33408,
-          "latency_ms": 850951.2
+          "in_tokens": 65486,
+          "out_tokens": 74029,
+          "total_tokens": 139515,
+          "cache_tokens": 34048,
+          "latency_ms": 741075.7
         },
         "simple": {
           "llm_calls": 28,
-          "in_tokens": 32987,
-          "out_tokens": 22381,
-          "total_tokens": 55368,
-          "cache_tokens": 19584,
-          "latency_ms": 363714.5
+          "in_tokens": 31809,
+          "out_tokens": 27144,
+          "total_tokens": 58953,
+          "cache_tokens": 19840,
+          "latency_ms": 310894.5
         },
         "complex": {
-          "llm_calls": 31,
-          "in_tokens": 59673,
-          "out_tokens": 57459,
-          "total_tokens": 117132,
-          "cache_tokens": 12416,
-          "latency_ms": 468664.3
+          "llm_calls": 38,
+          "in_tokens": 83858,
+          "out_tokens": 68612,
+          "total_tokens": 152470,
+          "cache_tokens": 26752,
+          "latency_ms": 583676.9
         }
       },
-      "llm_calls": 111,
-      "in_tokens": 157398,
-      "out_tokens": 151283,
-      "total_tokens": 308681,
-      "cache_tokens": 67072,
-      "latency_ms": 1684368.1
+      "llm_calls": 118,
+      "in_tokens": 182911,
+      "out_tokens": 169825,
+      "total_tokens": 352736,
+      "cache_tokens": 82304,
+      "latency_ms": 1636327.2
     }
   },
   "metrics_by_suite": {
     "analysis": {
       "n_cases": 4,
+      "n_failed": 0,
       "classification": {
         "domain_accuracy": 1.0,
         "intent_accuracy": 0.75,
@@ -122,31 +124,32 @@
         "by_path": {
           "medium": {
             "llm_calls": 9,
-            "in_tokens": 12068,
-            "out_tokens": 19411,
-            "total_tokens": 31479,
-            "cache_tokens": 5504,
-            "latency_ms": 214307.1
+            "in_tokens": 12926,
+            "out_tokens": 17614,
+            "total_tokens": 30540,
+            "cache_tokens": 5760,
+            "latency_ms": 176502.2
           },
           "simple": {
             "llm_calls": 3,
-            "in_tokens": 3690,
-            "out_tokens": 4445,
-            "total_tokens": 8135,
+            "in_tokens": 3406,
+            "out_tokens": 7744,
+            "total_tokens": 11150,
             "cache_tokens": 1920,
-            "latency_ms": 171543.7
+            "latency_ms": 87225.1
           }
         },
         "llm_calls": 12,
-        "in_tokens": 15758,
-        "out_tokens": 23856,
-        "total_tokens": 39614,
-        "cache_tokens": 7424,
-        "latency_ms": 385850.8
+        "in_tokens": 16332,
+        "out_tokens": 25358,
+        "total_tokens": 41690,
+        "cache_tokens": 7680,
+        "latency_ms": 263727.3
       }
     },
     "classification": {
       "n_cases": 11,
+      "n_failed": 0,
       "classification": {
         "domain_accuracy": 1.0,
         "intent_accuracy": 0.9,
@@ -173,50 +176,51 @@
         "model_routing_accuracy": 1.0
       },
       "answer_quality": {
-        "correctness": 4.9,
+        "correctness": 4.8,
         "relevance": 5.0,
-        "completeness": 4.9,
+        "completeness": 5.0,
         "technical_depth": 4.8,
         "practical_usefulness": 5.0,
-        "hallucination": 4.9
+        "hallucination": 4.8
       },
       "cost": {
         "by_path": {
           "simple": {
             "llm_calls": 6,
-            "in_tokens": 10407,
-            "out_tokens": 12147,
-            "total_tokens": 22554,
-            "cache_tokens": 3968,
-            "latency_ms": 125944.1
+            "in_tokens": 10014,
+            "out_tokens": 13410,
+            "total_tokens": 23424,
+            "cache_tokens": 4096,
+            "latency_ms": 158580.7
           },
           "medium": {
             "llm_calls": 18,
-            "in_tokens": 21245,
-            "out_tokens": 20041,
-            "total_tokens": 41286,
-            "cache_tokens": 11776,
-            "latency_ms": 215597.7
+            "in_tokens": 21578,
+            "out_tokens": 17553,
+            "total_tokens": 39131,
+            "cache_tokens": 12032,
+            "latency_ms": 194208.6
           },
           "complex": {
-            "llm_calls": 14,
-            "in_tokens": 26608,
-            "out_tokens": 19693,
-            "total_tokens": 46301,
-            "cache_tokens": 5120,
-            "latency_ms": 180826.9
+            "llm_calls": 18,
+            "in_tokens": 36331,
+            "out_tokens": 23642,
+            "total_tokens": 59973,
+            "cache_tokens": 11648,
+            "latency_ms": 235567.1
           }
         },
-        "llm_calls": 39,
-        "in_tokens": 60020,
-        "out_tokens": 51920,
-        "total_tokens": 111940,
-        "cache_tokens": 22528,
-        "latency_ms": 523406.8
+        "llm_calls": 43,
+        "in_tokens": 69681,
+        "out_tokens": 54645,
+        "total_tokens": 124326,
+        "cache_tokens": 29440,
+        "latency_ms": 589036.5
       }
     },
     "code_snippet": {
       "n_cases": 3,
+      "n_failed": 0,
       "classification": {
         "domain_accuracy": 1.0,
         "intent_accuracy": 1.0,
@@ -246,37 +250,38 @@
         "by_path": {
           "simple": {
             "llm_calls": 3,
-            "in_tokens": 2695,
-            "out_tokens": 525,
-            "total_tokens": 3220,
-            "cache_tokens": 1920,
-            "latency_ms": 6622.1
+            "in_tokens": 2544,
+            "out_tokens": 1679,
+            "total_tokens": 4223,
+            "cache_tokens": 2048,
+            "latency_ms": 14765.2
           },
           "medium": {
             "llm_calls": 6,
-            "in_tokens": 5797,
-            "out_tokens": 5990,
-            "total_tokens": 11787,
-            "cache_tokens": 3968,
-            "latency_ms": 114393.4
+            "in_tokens": 6519,
+            "out_tokens": 10360,
+            "total_tokens": 16879,
+            "cache_tokens": 4096,
+            "latency_ms": 95135.9
           }
         },
         "llm_calls": 9,
-        "in_tokens": 8492,
-        "out_tokens": 6515,
-        "total_tokens": 15007,
-        "cache_tokens": 5888,
-        "latency_ms": 121015.5
+        "in_tokens": 9063,
+        "out_tokens": 12039,
+        "total_tokens": 21102,
+        "cache_tokens": 6144,
+        "latency_ms": 109901.1
       }
     },
     "debugging": {
       "n_cases": 3,
+      "n_failed": 0,
       "classification": {
         "domain_accuracy": 1.0,
-        "intent_accuracy": 1.0,
+        "intent_accuracy": 0.6667,
         "complexity_accuracy": 1.0,
         "per_intent": {
-          "troubleshooting": 1.0
+          "troubleshooting": 0.6667
         },
         "per_complexity": {
           "simple": 1.0,
@@ -284,7 +289,7 @@
         }
       },
       "routing": {
-        "strategy_accuracy": 1.0,
+        "strategy_accuracy": 0.6667,
         "orchestration_accuracy": 1.0,
         "model_routing_accuracy": 1.0
       },
@@ -292,7 +297,7 @@
         "correctness": 5.0,
         "relevance": 5.0,
         "completeness": 5.0,
-        "technical_depth": 4.33,
+        "technical_depth": 4.67,
         "practical_usefulness": 5.0,
         "hallucination": 5.0
       },
@@ -300,31 +305,32 @@
         "by_path": {
           "simple": {
             "llm_calls": 3,
-            "in_tokens": 2830,
-            "out_tokens": 655,
-            "total_tokens": 3485,
+            "in_tokens": 2796,
+            "out_tokens": 1272,
+            "total_tokens": 4068,
             "cache_tokens": 2048,
-            "latency_ms": 8328.2
+            "latency_ms": 15142.1
           },
           "medium": {
             "llm_calls": 6,
-            "in_tokens": 7264,
-            "out_tokens": 7789,
-            "total_tokens": 15053,
+            "in_tokens": 7177,
+            "out_tokens": 7866,
+            "total_tokens": 15043,
             "cache_tokens": 4096,
-            "latency_ms": 79916.4
+            "latency_ms": 88781.5
           }
         },
         "llm_calls": 9,
-        "in_tokens": 10094,
-        "out_tokens": 8444,
-        "total_tokens": 18538,
+        "in_tokens": 9973,
+        "out_tokens": 9138,
+        "total_tokens": 19111,
         "cache_tokens": 6144,
-        "latency_ms": 88244.6
+        "latency_ms": 103923.6
       }
     },
     "direct": {
       "n_cases": 3,
+      "n_failed": 0,
       "classification": {
         "domain_accuracy": 1.0,
         "intent_accuracy": 1.0,
@@ -346,31 +352,32 @@
         "correctness": 5.0,
         "relevance": 5.0,
         "completeness": 4.5,
-        "technical_depth": 4.5,
-        "practical_usefulness": 5.0,
+        "technical_depth": 4.0,
+        "practical_usefulness": 4.5,
         "hallucination": 5.0
       },
       "cost": {
         "by_path": {
           "simple": {
             "llm_calls": 7,
-            "in_tokens": 6980,
-            "out_tokens": 928,
-            "total_tokens": 7908,
+            "in_tokens": 7221,
+            "out_tokens": 1086,
+            "total_tokens": 8307,
             "cache_tokens": 5760,
-            "latency_ms": 12974.0
+            "latency_ms": 12716.5
           }
         },
         "llm_calls": 7,
-        "in_tokens": 6980,
-        "out_tokens": 928,
-        "total_tokens": 7908,
+        "in_tokens": 7221,
+        "out_tokens": 1086,
+        "total_tokens": 8307,
         "cache_tokens": 5760,
-        "latency_ms": 12974.0
+        "latency_ms": 12716.5
       }
     },
     "orchestration": {
       "n_cases": 3,
+      "n_failed": 0,
       "classification": {
         "domain_accuracy": 1.0,
         "intent_accuracy": 1.0,
@@ -392,32 +399,33 @@
       "answer_quality": {
         "correctness": 4.67,
         "relevance": 5.0,
-        "completeness": 4.67,
-        "technical_depth": 4.33,
+        "completeness": 5.0,
+        "technical_depth": 5.0,
         "practical_usefulness": 5.0,
         "hallucination": 4.67
       },
       "cost": {
         "by_path": {
           "complex": {
-            "llm_calls": 17,
-            "in_tokens": 33065,
-            "out_tokens": 37766,
-            "total_tokens": 70831,
-            "cache_tokens": 7296,
-            "latency_ms": 287837.4
+            "llm_calls": 20,
+            "in_tokens": 47527,
+            "out_tokens": 44970,
+            "total_tokens": 92497,
+            "cache_tokens": 15104,
+            "latency_ms": 348109.8
           }
         },
-        "llm_calls": 17,
-        "in_tokens": 33065,
-        "out_tokens": 37766,
-        "total_tokens": 70831,
-        "cache_tokens": 7296,
-        "latency_ms": 287837.4
+        "llm_calls": 20,
+        "in_tokens": 47527,
+        "out_tokens": 44970,
+        "total_tokens": 92497,
+        "cache_tokens": 15104,
+        "latency_ms": 348109.8
       }
     },
     "routing": {
       "n_cases": 3,
+      "n_failed": 0,
       "classification": {
         "domain_accuracy": 1.0,
         "intent_accuracy": 1.0,
@@ -449,31 +457,32 @@
         "by_path": {
           "medium": {
             "llm_calls": 6,
-            "in_tokens": 8747,
-            "out_tokens": 6858,
-            "total_tokens": 15605,
+            "in_tokens": 8061,
+            "out_tokens": 8171,
+            "total_tokens": 16232,
             "cache_tokens": 3968,
-            "latency_ms": 137954.7
+            "latency_ms": 86156.5
           },
           "simple": {
             "llm_calls": 3,
-            "in_tokens": 2942,
-            "out_tokens": 1876,
-            "total_tokens": 4818,
+            "in_tokens": 2831,
+            "out_tokens": 872,
+            "total_tokens": 3703,
             "cache_tokens": 1920,
-            "latency_ms": 19671.4
+            "latency_ms": 10369.7
           }
         },
         "llm_calls": 9,
-        "in_tokens": 11689,
-        "out_tokens": 8734,
-        "total_tokens": 20423,
+        "in_tokens": 10892,
+        "out_tokens": 9043,
+        "total_tokens": 19935,
         "cache_tokens": 5888,
-        "latency_ms": 157626.1
+        "latency_ms": 96526.2
       }
     },
     "teaching": {
       "n_cases": 3,
+      "n_failed": 0,
       "classification": {
         "domain_accuracy": 1.0,
         "intent_accuracy": 1.0,
@@ -505,27 +514,27 @@
         "by_path": {
           "simple": {
             "llm_calls": 3,
-            "in_tokens": 3443,
-            "out_tokens": 1805,
-            "total_tokens": 5248,
+            "in_tokens": 2997,
+            "out_tokens": 1081,
+            "total_tokens": 4078,
             "cache_tokens": 2048,
-            "latency_ms": 18631.0
+            "latency_ms": 12095.2
           },
           "medium": {
             "llm_calls": 6,
-            "in_tokens": 7857,
-            "out_tokens": 11315,
-            "total_tokens": 19172,
+            "in_tokens": 9225,
+            "out_tokens": 12465,
+            "total_tokens": 21690,
             "cache_tokens": 4096,
-            "latency_ms": 88781.9
+            "latency_ms": 100291.0
           }
         },
         "llm_calls": 9,
-        "in_tokens": 11300,
-        "out_tokens": 13120,
-        "total_tokens": 24420,
+        "in_tokens": 12222,
+        "out_tokens": 13546,
+        "total_tokens": 25768,
         "cache_tokens": 6144,
-        "latency_ms": 107412.9
+        "latency_ms": 112386.2
       }
     }
   }

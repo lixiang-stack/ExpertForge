@@ -9,10 +9,6 @@
     "supports_json_schema": false,
     "supports_thinking_toggle": true
   },
-  "orchestrator": {
-    "max_workers": 4,
-    "worker_timeout": 120
-  },
   "evaluation": {
     "judge_model": "deepseek-v4-pro",
     "results_dir": "evaluation/results"

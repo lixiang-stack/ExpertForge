@@ -1,0 +1,12 @@
+enabled: true
+min_complexity: complex
+intents:
+  - architecture_design
+  - performance_analysis
+  - troubleshooting
+  - code_review
+max_workers: 4
+evaluator:
+  enabled: true
+  min_dimension_score: 3
+  max_rounds: 1

@@ -1,6 +1,12 @@
 import json
 
-from agent.config import AgentConfig, DomainConfig, IntentDef, StrategyDef
+from agent.config import (
+    AgentConfig,
+    DomainConfig,
+    EvaluatorPolicy,
+    IntentDef,
+    OrchestrationPolicy,
+)
 from agent.llm import ChatResult
 from agent.router import Router
 
@@ -22,13 +28,12 @@ def _domain(**overrides):
             "troubleshooting": "debugging",
             "architecture_design": "analysis",
         },
-        "strategies": {
-            "teaching": StrategyDef("teaching", complexity_gate=True, default=True),
-            "direct": StrategyDef("direct"),
-            "debugging": StrategyDef("debugging", complexity_gate=True),
-            "analysis": StrategyDef("analysis", complexity_gate=True),
-        },
-        "default_strategy": "teaching",
+        "strategies": ["teaching", "direct", "debugging", "analysis"],
+        "orchestration": OrchestrationPolicy(
+            enabled=True, min_complexity="complex",
+            intents=["architecture_design", "troubleshooting"],
+            max_workers=4, evaluator=EvaluatorPolicy(enabled=True),
+        ),
         "prompts": {},
     }
     default.update(overrides)
@@ -83,21 +88,35 @@ def test_route_out_of_domain_rejects():
     assert result.reject_reason == "unrelated"
 
 
-def test_route_unknown_intent_falls_back_to_default():
-    client = FakeClient([_combined(True, "bogus", "simple")])  # intent bogus → validation sets None
+def test_route_unknown_intent_rejects():
+    client = FakeClient([_combined(True, "bogus", "simple")])  # validation sets intent to None
     result = Router(client, _config(), _domain()).route("q")
-    assert result.strategy == "teaching"
-    assert result.orchestrate is False
+    assert result.in_domain is False
+    assert result.strategy == "reject"
 
 
-def test_route_complex_gated_sets_orchestrate():
+def test_route_policy_orchestrates_complex_in_intent():
     client = FakeClient([_combined(True, "architecture_design", "complex")])
     result = Router(client, _config(), _domain()).route("design a big system")
     assert result.strategy == "analysis"
     assert result.orchestrate is True
 
 
-def test_route_complex_ungated_strategy_stays():
+def test_route_policy_disabled_never_orchestrates():
+    domain = _domain(orchestration=OrchestrationPolicy(
+        enabled=False, min_complexity="simple", intents=["architecture_design"]))
+    client = FakeClient([_combined(True, "architecture_design", "complex")])
+    result = Router(client, _config(), domain).route("design a big system")
+    assert result.orchestrate is False
+
+
+def test_route_policy_complexity_below_min_not_orchestrated():
+    client = FakeClient([_combined(True, "architecture_design", "medium")])
+    result = Router(client, _config(), _domain()).route("design something")
+    assert result.orchestrate is False
+
+
+def test_route_policy_intent_not_in_list_not_orchestrated():
     client = FakeClient([_combined(True, "faq", "complex")])
     result = Router(client, _config(), _domain()).route("q")
     assert result.strategy == "direct"
