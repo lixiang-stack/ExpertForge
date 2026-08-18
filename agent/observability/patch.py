@@ -1,6 +1,6 @@
 """Non-invasive observability injection (AOP-style monkey-patching).
 
-What it does: `apply()` wraps eight business methods in place
+What it does: `apply()` wraps ten business methods in place
 (Chat.respond, ClassificationService.classify, ...) with tracing wrappers
 that record trace_start / decision / trace_end events and open the
 trace_span / phase contexts -- WITHOUT touching any business code.
@@ -52,6 +52,8 @@ DEFAULT_PHASES: dict[str, str] = {
     "Orchestrator._worker": "orchestration.worker",
     "Orchestrator._aggregate": "orchestration.aggregate",
     "Orchestrator._direct_answer": "orchestration.direct",
+    "Orchestrator._evaluate": "orchestration.evaluator",
+    "Orchestrator._reaggregate": "orchestration.optimizer",
 }
 
 # The active Installed (or None). Wrappers become transparent passthroughs when
@@ -100,6 +102,8 @@ class Installed:
             "Orchestrator._worker": self._wrap_worker,
             "Orchestrator._aggregate": self._wrap_aggregate,
             "Orchestrator._direct_answer": self._wrap_direct,
+            "Orchestrator._evaluate": self._wrap_evaluate,
+            "Orchestrator._reaggregate": self._wrap_reaggregate,
         }
         try:
             original = getattr(target, patch_name)
@@ -235,7 +239,47 @@ class Installed:
             if inst is None:
                 return original(orch, question, strategy, context, results, model)  # passthrough: real business call
             with phase(inst._phase(key)):
-                return original(orch, question, strategy, context, results, model)  # <-- real business call
+                answer = original(orch, question, strategy, context, results, model)  # <-- real business call
+                tid = current_trace_id()
+                if tid:
+                    policy = orch.domain.orchestration
+                    inst._record_decision(tid, inst._phase(key), {
+                        "evaluated": bool(policy and policy.evaluator.enabled),
+                        "evaluator_model": orch._judge_model()})
+                return answer
+        return wrapper
+
+    def _wrap_evaluate(self, original, key):
+        def wrapper(orch, judge, question, answer):
+            inst = _current_inst()
+            if inst is None:
+                return original(orch, judge, question, answer)
+            with phase(inst._phase(key)):
+                scorecard = original(orch, judge, question, answer)
+                tid = current_trace_id()
+                if tid:
+                    policy = orch.domain.orchestration
+                    threshold = policy.evaluator.min_dimension_score if policy else 3
+                    passed = scorecard is not None and all(
+                        s >= threshold for s in scorecard.values()
+                    )
+                    inst._record_decision(tid, inst._phase(key), {
+                        "scorecard": scorecard, "passed": bool(passed)})
+                return scorecard
+        return wrapper
+
+    def _wrap_reaggregate(self, original, key):
+        def wrapper(orch, question, strategy, context, results, previous, feedback, round_no, model):
+            inst = _current_inst()
+            if inst is None:
+                return original(orch, question, strategy, context, results, previous, feedback, round_no, model)
+            with phase(inst._phase(key)):
+                answer = original(orch, question, strategy, context, results, previous, feedback, round_no, model)
+                tid = current_trace_id()
+                if tid:
+                    inst._record_decision(tid, inst._phase(key), {
+                        "round": round_no, "feedback": feedback})
+                return answer
         return wrapper
 
     def _wrap_direct(self, original, key):
@@ -258,6 +302,8 @@ class Installed:
             ("Orchestrator._worker", Orchestrator, "_worker"),
             ("Orchestrator._aggregate", Orchestrator, "_aggregate"),
             ("Orchestrator._direct_answer", Orchestrator, "_direct_answer"),
+            ("Orchestrator._evaluate", Orchestrator, "_evaluate"),
+            ("Orchestrator._reaggregate", Orchestrator, "_reaggregate"),
         ]
         for key, cls, method in targets:
             self._wrap(key, cls, method)

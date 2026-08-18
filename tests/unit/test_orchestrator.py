@@ -1,22 +1,24 @@
-from agent.config import AgentConfig, DomainConfig, IntentDef, StrategyDef
+from agent.config import AgentConfig, DomainConfig, EvaluationConfig, EvaluatorPolicy, IntentDef, OrchestrationPolicy
 from agent.llm import ChatResult, LLMError
 from agent.orchestrator import Orchestrator
 from agent.router import RouteResult
 from agent.worker_pool import WorkerResult, WorkerTask
 
 
-def _domain():
+def _domain(evaluator=None):
     return DomainConfig(
         name="sw",
         description="software engineering",
         out_of_domain_reply="Out.",
         intents={"troubleshooting": IntentDef("troubleshooting", "debug")},
         intent_mapping={"troubleshooting": "debugging"},
-        strategies={"debugging": StrategyDef("debugging", complexity_gate=True, default=True)},
-        default_strategy="debugging",
-        prompts={
-            "debugging": "Debugging system prompt.",
-        },
+        strategies=["debugging"],
+        prompts={"debugging": "Debugging system prompt."},
+        orchestration=OrchestrationPolicy(
+            enabled=True, min_complexity="complex", intents=["troubleshooting"],
+            max_workers=4,
+            evaluator=evaluator or EvaluatorPolicy(enabled=True, min_dimension_score=3, max_rounds=1),
+        ),
     )
 
 
@@ -51,6 +53,28 @@ class RaisingClient(FakeClient):
                                        json_mode=json_mode, json_schema=json_schema)
 
 
+_PLAN_JSON = '{"tasks": [{"title": "t1", "instruction": "i1", "role": "R1"}, {"title": "t2", "instruction": "i2", "role": "R2"}]}'
+_SCORECARD_PASS = ('{"correctness": 4, "relevance": 4, "completeness": 4, '
+                   '"technical_depth": 4, "practical_usefulness": 4, "hallucination": 4}')
+_SCORECARD_LOW = ('{"correctness": 2, "relevance": 4, "completeness": 4, '
+                  '"technical_depth": 4, "practical_usefulness": 4, "hallucination": 4}')
+
+
+class CallRaisingClient(FakeClient):
+    def __init__(self, responses, raise_on_call):
+        super().__init__(responses)
+        self.raise_on_call = raise_on_call
+
+    def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False, json_schema=None):
+        if len(self.calls) == self.raise_on_call:
+            self.calls.append((messages, model, disable_thinking, json_mode, json_schema))
+            raise LLMError("boom")
+        return super().chat_completion(
+            messages, model=model, disable_thinking=disable_thinking,
+            json_mode=json_mode, json_schema=json_schema,
+        )
+
+
 def _route():
     return RouteResult(
         in_domain=True, strategy="debugging", intent="troubleshooting",
@@ -65,7 +89,7 @@ def test_run_normal_path_planner_workers_aggregator():
         "worker2 output",
         "final answer",
     ])
-    result = Orchestrator(client, _config(), _domain()).run("huge task", _route(), "high-a")
+    result = Orchestrator(client, _config(), _domain(evaluator=EvaluatorPolicy(enabled=False))).run("huge task", _route(), "high-a")
     assert result == "final answer"
     assert len(client.calls) == 4
     # planner call expresses json_schema intent; json_mode is not passed
@@ -127,7 +151,7 @@ def test_run_worker_empty_output_still_aggregates():
         "",
         "final answer",
     ])
-    result = Orchestrator(client, _config(), _domain()).run("huge task", _route(), "high-a")
+    result = Orchestrator(client, _config(), _domain(evaluator=EvaluatorPolicy(enabled=False))).run("huge task", _route(), "high-a")
     assert result == "final answer"
     assert len(client.calls) == 4
     # aggregator user message contains both worker outputs including the empty one
@@ -143,7 +167,7 @@ def test_run_planner_uses_json_schema_intent():
         "worker1 output",
         "final answer",
     ])
-    result = Orchestrator(client, _config(), _domain()).run("huge task", _route(), "high-a")
+    result = Orchestrator(client, _config(), _domain(evaluator=EvaluatorPolicy(enabled=False))).run("huge task", _route(), "high-a")
     assert result == "final answer"
     planner_messages, planner_model, planner_dt, planner_jm, planner_schema = client.calls[0]
     assert planner_schema is not None
@@ -197,7 +221,7 @@ def test_run_partial_worker_failure_aggregates_partial():
         '{"tasks": [{"title": "t1", "instruction": "i1", "role": "R1"}, {"title": "t2", "instruction": "i2", "role": "R2"}]}',
         "w1", "final",
     ], raise_on_roles={"R2"})
-    result = Orchestrator(client, _config(), _domain()).run("huge task", _route(), "high-a")
+    result = Orchestrator(client, _config(), _domain(evaluator=EvaluatorPolicy(enabled=False))).run("huge task", _route(), "high-a")
     assert result == "final"
     assert len(client.calls) == 4
     agg_user = client.calls[3][0][-1]["content"]
@@ -213,3 +237,70 @@ def test_run_all_workers_fail_degrades_to_direct():
     result = Orchestrator(client, _config(), _domain()).run("huge task", _route(), "high-a")
     assert result == "direct answer"
     assert len(client.calls) == 4
+
+
+def test_run_evaluator_passes_returns_aggregated():
+    client = FakeClient([_PLAN_JSON, "w1", "w2", "final answer", _SCORECARD_PASS])
+    result = Orchestrator(client, _config(), _domain()).run("huge task", _route(), "high-a")
+    assert result == "final answer"
+    assert len(client.calls) == 5
+    judge_messages = client.calls[4][0]
+    assert judge_messages[-1]["content"] == "huge task"
+
+
+def test_run_evaluator_fail_optimizes_once():
+    client = FakeClient([_PLAN_JSON, "w1", "w2", "draft answer", _SCORECARD_LOW,
+                         "improved answer", _SCORECARD_PASS])
+    result = Orchestrator(client, _config(), _domain()).run("huge task", _route(), "high-a")
+    assert result == "improved answer"
+    assert len(client.calls) == 7
+    reaggregate_messages = client.calls[5][0]
+    assert "correctness: 2/5" in reaggregate_messages[0]["content"]
+    assert "Previous draft:\ndraft answer" in reaggregate_messages[-1]["content"]
+    assert "Sub-task (R1): t1" in reaggregate_messages[-1]["content"]
+
+
+def test_run_evaluator_fail_exhausts_max_rounds():
+    client = FakeClient([_PLAN_JSON, "w1", "w2", "draft answer", _SCORECARD_LOW,
+                         "attempt 1", _SCORECARD_LOW])
+    result = Orchestrator(client, _config(), _domain()).run("huge task", _route(), "high-a")
+    assert result == "attempt 1"
+    assert len(client.calls) == 7
+
+
+def test_run_evaluator_disabled_skips_judge():
+    domain = _domain(evaluator=EvaluatorPolicy(enabled=False))
+    client = FakeClient([_PLAN_JSON, "w1", "w2", "final answer"])
+    result = Orchestrator(client, _config(), domain).run("huge task", _route(), "high-a")
+    assert result == "final answer"
+    assert len(client.calls) == 4
+
+
+def test_run_judge_parse_failure_treated_as_pass():
+    client = FakeClient([_PLAN_JSON, "w1", "w2", "final answer", "not json"])
+    result = Orchestrator(client, _config(), _domain()).run("huge task", _route(), "high-a")
+    assert result == "final answer"
+    assert len(client.calls) == 5
+
+
+def test_run_judge_llm_error_treated_as_pass():
+    client = CallRaisingClient([_PLAN_JSON, "w1", "w2", "final answer", "unused"],
+                               raise_on_call=4)
+    result = Orchestrator(client, _config(), _domain()).run("huge task", _route(), "high-a")
+    assert result == "final answer"
+
+
+def test_run_reaggregate_llm_error_returns_previous():
+    client = CallRaisingClient([_PLAN_JSON, "w1", "w2", "draft answer", _SCORECARD_LOW,
+                                "unused"], raise_on_call=5)
+    result = Orchestrator(client, _config(), _domain()).run("huge task", _route(), "high-a")
+    assert result == "draft answer"
+
+
+def test_run_judge_uses_judge_model_from_config():
+    config = _config()
+    config.evaluation = EvaluationConfig(judge_model="judge-a")
+    client = FakeClient([_PLAN_JSON, "w1", "w2", "final answer", _SCORECARD_PASS])
+    Orchestrator(client, config, _domain()).run("huge task", _route(), "high-a")
+    judge_call = client.calls[4]
+    assert judge_call[1] == "judge-a"

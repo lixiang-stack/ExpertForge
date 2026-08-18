@@ -1,4 +1,4 @@
-from agent.config import DomainConfig, IntentDef, StrategyDef
+from agent.config import DomainConfig, IntentDef
 from agent.llm import ChatResult
 from agent.strategy import Strategy, build_registry
 
@@ -17,9 +17,7 @@ def _domain():
         out_of_domain_reply="Out.",
         intents={},
         intent_mapping={},
-        strategies={"direct": StrategyDef("direct", default=True),
-                    "teaching": StrategyDef("teaching", complexity_gate=True)},
-        default_strategy="direct",
+        strategies=["direct", "teaching"],
         prompts=_prompts(),
     )
 

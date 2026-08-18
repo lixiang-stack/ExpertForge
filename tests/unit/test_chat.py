@@ -1,5 +1,5 @@
 from agent.chat import Chat
-from agent.config import AgentConfig, DomainConfig, IntentDef, StrategyDef
+from agent.config import AgentConfig, DomainConfig, EvaluatorPolicy, IntentDef, OrchestrationPolicy
 from agent.llm import ChatResult
 
 
@@ -13,15 +13,14 @@ def _domain():
             "troubleshooting": IntentDef("troubleshooting", "debug"),
         },
         intent_mapping={"faq": "direct", "troubleshooting": "debugging"},
-        strategies={
-            "direct": StrategyDef("direct", default=True),
-            "debugging": StrategyDef("debugging", complexity_gate=True),
-        },
-        default_strategy="direct",
+        strategies=["direct", "debugging"],
+        orchestration=OrchestrationPolicy(
+            enabled=True, min_complexity="complex", intents=["troubleshooting"],
+            max_workers=4, evaluator=EvaluatorPolicy(enabled=False),
+        ),
         prompts={
             "direct": "Direct answer prompt.",
             "debugging": "Debugging prompt.",
-            "unsupported_complex": "Needs orchestrator.",
         },
     )
 

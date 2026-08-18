@@ -8,6 +8,17 @@ from agent.llm import ChatResult
 def _write_finance_domain(tmp_path):
     base = tmp_path / "finance"
     (base / "prompts").mkdir(parents=True)
+    (base / "orchestration.yaml").write_text(
+        "enabled: true\n"
+        "min_complexity: complex\n"
+        "intents:\n"
+        "  - portfolio_review\n"
+        "  - risk_check\n"
+        "max_workers: 2\n"
+        "evaluator:\n"
+        "  enabled: false\n",
+        encoding="utf-8",
+    )
     (base / "domain.json").write_text(json.dumps({
         "name": "Finance Advice",
         "description": "Personal finance, investment, and risk guidance.",
@@ -21,11 +32,6 @@ def _write_finance_domain(tmp_path):
     (base / "intent_mapping.yaml").write_text(
         "portfolio_review: advise\nrisk_check: risk_assessment\n", encoding="utf-8"
     )
-    (base / "strategies.yaml").write_text(
-        "advise:\n  default: true\n  complexity_gate: true\n"
-        "risk_assessment:\n  complexity_gate: true\n",
-        encoding="utf-8",
-    )
     (base / "prompts" / "advise.md").write_text(
         "You are a finance advisor in the Finance Advice domain.\n\n"
         "Personal finance, investment, and risk guidance.\n\n"
@@ -38,7 +44,6 @@ def _write_finance_domain(tmp_path):
         "Structure:\n- Risk factors\n- Likelihood\n- Mitigations\n",
         encoding="utf-8",
     )
-    (base / "prompts" / "unsupported_complex.md").write_text("unsupported", encoding="utf-8")
     return str(base)
 
 
@@ -58,7 +63,7 @@ class FakeClient:
 
 def test_custom_strategy_answers_without_code_changes(tmp_path):
     domain = load_domain_config(_write_finance_domain(tmp_path))
-    assert domain.default_strategy == "advise"
+    assert domain.strategies == ["advise", "risk_assessment"]
     client = FakeClient([
         '{"in_domain": true, "intent": "portfolio_review", "complexity": "simple", "reason": "ok"}',
         "the finance advice",

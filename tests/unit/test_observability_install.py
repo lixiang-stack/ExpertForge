@@ -30,14 +30,13 @@ _CLASSIFY = '{"in_domain": true, "intent": "faq", "complexity": "simple", "reaso
 
 
 def _domain():
-    from agent.config import DomainConfig, IntentDef, StrategyDef
+    from agent.config import DomainConfig, IntentDef
     return DomainConfig(
         name="sw", description="desc", out_of_domain_reply="Out.",
         intents={"faq": IntentDef("faq", "quick")},
         intent_mapping={"faq": "direct"},
-        strategies={"direct": StrategyDef("direct", default=True)},
-        default_strategy="direct",
-        prompts={"direct": "Direct prompt.", "unsupported_complex": "x."},
+        strategies=["direct"],
+        prompts={"direct": "Direct prompt."},
     )
 
 
