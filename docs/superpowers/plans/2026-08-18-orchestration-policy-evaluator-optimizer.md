@@ -1128,6 +1128,33 @@ from .router import RouteResult
 from .worker_pool import WorkerResult, WorkerTask, run_workers
 ```
 
+Add the re-aggregation prompt templates as module-level constants next to
+`_PLANNER_PROMPT` (same convention as `_JUDGE_PROMPT`/`_CLASSIFICATION_PROMPT`
+— no prompt text inline in method bodies; render at runtime):
+
+```python
+_REAGGREGATE_SYSTEM_PROMPT = """{context}
+
+You are synthesizing sub-task results into one coherent final answer to the
+user's original question. Some sub-task results may be missing due to worker
+failure; produce the best answer from what is available.
+
+A previous draft scored too low on these judge dimensions; produce an
+improved draft that addresses them:
+{feedback_lines}
+"""
+
+_REAGGREGATE_USER_TEMPLATE = """User question: {question}
+
+Sub-task results:
+
+{sub_task_sections}
+
+Previous draft:
+{previous}
+"""
+```
+
 Rewrite `run()` and add the new methods (keep `_plan`, `_worker`, `_aggregate`, `_direct_answer` as-is):
 
 ```python
@@ -1193,25 +1220,17 @@ Rewrite `run()` and add the new methods (keep `_plan`, `_worker`, `_aggregate`, 
                 sections.append(f"{label}\n[worker failed: {r.error}]")
             else:
                 sections.append(f"{label}\n{r.text}")
-        user_content = (
-            f"User question: {question}\n\n"
-            f"Sub-task results:\n\n" + "\n\n".join(sections) +
-            f"\n\nPrevious draft:\n{previous}"
+        feedback_lines = "\n".join(f"- {f}" for f in feedback)
+        system = _REAGGREGATE_SYSTEM_PROMPT.format(
+            context=context, feedback_lines=feedback_lines,
+        )
+        user_content = _REAGGREGATE_USER_TEMPLATE.format(
+            question=question,
+            sub_task_sections="\n\n".join(sections),
+            previous=previous,
         )
         messages = [
-            {
-                "role": "system",
-                "content": (
-                    f"{context}\n\n"
-                    "You are synthesizing sub-task results into one coherent final "
-                    "answer to the user's original question. Some sub-task results "
-                    "may be missing due to worker failure; produce the best answer "
-                    "from what is available.\n\n"
-                    "A previous draft scored too low on these judge dimensions; "
-                    "produce an improved draft that addresses them:\n"
-                    + "\n".join(f"- {f}" for f in feedback)
-                ),
-            },
+            {"role": "system", "content": system},
             {"role": "user", "content": user_content},
         ]
         return self.client.chat_completion(messages, model=model, disable_thinking=True).text
