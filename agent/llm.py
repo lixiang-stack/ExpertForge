@@ -5,6 +5,9 @@ from typing import Iterator
 
 from openai import OpenAI, OpenAIError
 
+from .capabilities import ProviderCapabilities
+from .negotiate import negotiate_structured_output
+
 
 class LLMError(Exception):
     """Raised when an LLM API call fails."""
@@ -21,12 +24,16 @@ class ChatResult:
 
 
 class LLMClient:
-    def __init__(self, base_url: str, api_key: str, model: str, timeout: float | None = None):
+    def __init__(self, base_url: str, api_key: str, model: str, timeout: float | None = None,
+                 provider: str = "", capability_overrides: dict | None = None):
         kwargs: dict = {"api_key": api_key, "base_url": base_url}
         if timeout is not None:
             kwargs["timeout"] = timeout
         self.client = OpenAI(**kwargs)
         self.model = model
+        self.capabilities = ProviderCapabilities(
+            provider=provider or "unknown", **capability_overrides or {}
+        )
 
     def chat_completion(
         self,
@@ -38,25 +45,33 @@ class LLMClient:
         json_mode: bool = False,
         json_schema: dict | None = None,
     ) -> ChatResult:
+        if not any(m.get("role") == "user" for m in messages):
+            raise LLMError(
+                "Every chat_completion call must include at least one user message "
+                "(all supported providers require or expect a user turn)."
+            )
         try:
+            mode = negotiate_structured_output(
+                self.capabilities, json_mode=json_mode, json_schema=json_schema
+            )
             kwargs = {
                 "model": model or self.model,
                 "messages": messages,
                 "temperature": temperature,
                 "stream": False,
             }
-            if json_schema is not None:
+            if mode == "json_schema":
                 kwargs["response_format"] = {
                     "type": "json_schema",
                     "json_schema": {
-                        "name": "classification_result",
+                        "name": "structured_output",
                         "schema": json_schema,
                         "strict": False,
                     },
                 }
-            elif json_mode:
+            elif mode == "json_object":
                 kwargs["response_format"] = {"type": "json_object"}
-            if disable_thinking:
+            if disable_thinking and self.capabilities.supports_thinking_toggle:
                 kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
             resp = self.client.chat.completions.create(**kwargs)
             u = resp.usage

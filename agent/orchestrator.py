@@ -1,24 +1,11 @@
 from __future__ import annotations
 
-import json
-import re
-
 from .config import AgentConfig, DomainConfig, OrchestratorConfig
-from .llm import LLMClient, LLMError
+from .llm import LLMClient
+from .parsing import parse_json
 from .strategy import build_registry
 from .router import RouteResult
 from .worker_pool import WorkerResult, WorkerTask, run_workers
-
-
-def _parse_json(text: str) -> dict | None:
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
-        return None
-    try:
-        data = json.loads(match.group(0))
-    except json.JSONDecodeError:
-        return None
-    return data if isinstance(data, dict) else None
 
 
 def _planner_schema() -> dict:
@@ -55,18 +42,6 @@ Rules:
 - Assign each sub-task a distinct analysis role (e.g. Architecture, Scalability,
   Reliability / Failure Modes, Operations) that defines its focused responsibility.
 - Output ONLY a single JSON object: {{"tasks": [{{"title": "...", "instruction": "...", "role": "..."}}]}}
-
-User question: {question}
-"""
-
-_PLANNER_DEGRADED_INSTRUCTION = """
-
-Answer in JSON only, using exactly this structure:
-{
-  "tasks": [
-    {"title": "<short sub-task title>", "instruction": "<standalone sub-task instruction>", "role": "<analysis role>"}
-  ]
-}
 """
 
 
@@ -105,30 +80,15 @@ class Orchestrator:
             name=self.domain.name,
             description=self.domain.description,
             context=context,
-            question=question,
         )
-        messages = [{"role": "system", "content": prompt}]
-        # TODO: prefer json_schema structured output once the model/provider supports it.
-        # The current provider rejects response_format=json_schema, so json_object
-        # (json_mode) is the main path for now. The json_schema path below is kept
-        # (commented out) for when a provider with json_schema support is used.
-        #
-        # try:
-        #     text = self.client.chat_completion(
-        #         messages, model=model, disable_thinking=True, json_schema=_planner_schema()
-        #     )
-        # except LLMError:
-        #     # Provider rejected json_schema (capability issue): degrade once.
-        #     degraded_messages = [
-        #         {"role": "system", "content": prompt + _PLANNER_DEGRADED_INSTRUCTION}
-        #     ]
-        #     text = self.client.chat_completion(
-        #         degraded_messages, model=model, disable_thinking=True, json_mode=True
-        #     )
+        messages = [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": question},
+        ]
         result = self.client.chat_completion(
-            messages, model=model, disable_thinking=True, json_mode=True
+            messages, model=model, disable_thinking=True, json_schema=_planner_schema()
         )
-        data = _parse_json(result.text)
+        data = parse_json(result.text)
         if not data or not isinstance(data.get("tasks"), list):
             return None
         tasks: list[WorkerTask] = []

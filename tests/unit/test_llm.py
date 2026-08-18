@@ -48,11 +48,29 @@ def test_chat_completion_disable_thinking_passes_extra_body(mock_openai):
     resp.usage = None
     mock_openai.return_value.chat.completions.create.return_value = resp
 
-    client = LLMClient("https://api.example.com/v1", "key", "model-a")
+    client = LLMClient(
+        "https://api.example.com/v1", "key", "model-a",
+        provider="deepseek", capability_overrides={"supports_thinking_toggle": True},
+    )
     client.chat_completion([{"role": "user", "content": "hi"}], disable_thinking=True)
 
     kwargs = mock_openai.return_value.chat.completions.create.call_args.kwargs
     assert kwargs["extra_body"] == {"thinking": {"type": "disabled"}}
+
+
+@patch("agent.llm.OpenAI")
+def test_chat_completion_omits_extra_body_when_provider_unsupported(mock_openai):
+    resp = MagicMock()
+    resp.choices[0].message.content = "x"
+    resp.model = "model-a"
+    resp.usage = None
+    mock_openai.return_value.chat.completions.create.return_value = resp
+
+    client = LLMClient("https://api.example.com/v1", "key", "model-a", provider="gemini")
+    client.chat_completion([{"role": "user", "content": "hi"}], disable_thinking=True)
+
+    kwargs = mock_openai.return_value.chat.completions.create.call_args.kwargs
+    assert "extra_body" not in kwargs
 
 
 @patch("agent.llm.OpenAI")
@@ -119,7 +137,10 @@ def test_chat_completion_json_mode_with_disable_thinking(mock_openai):
     resp.usage = None
     mock_openai.return_value.chat.completions.create.return_value = resp
 
-    client = LLMClient("https://api.example.com/v1", "key", "model-a")
+    client = LLMClient(
+        "https://api.example.com/v1", "key", "model-a",
+        provider="deepseek", capability_overrides={"supports_thinking_toggle": True},
+    )
     client.chat_completion(
         [{"role": "user", "content": "hi"}], json_mode=True, disable_thinking=True
     )
@@ -157,13 +178,16 @@ def test_chat_completion_json_schema_passes_response_format(mock_openai):
         "properties": {"ok": {"type": "boolean"}},
         "required": ["ok"],
     }
-    client = LLMClient("https://api.example.com/v1", "key", "model-a")
+    client = LLMClient(
+        "https://api.example.com/v1", "key", "model-a",
+        provider="gemini", capability_overrides={"supports_json_schema": True},
+    )
     client.chat_completion([{"role": "user", "content": "hi"}], json_schema=schema)
 
     kwargs = mock_openai.return_value.chat.completions.create.call_args.kwargs
     assert kwargs["response_format"] == {
         "type": "json_schema",
-        "json_schema": {"name": "classification_result", "schema": schema, "strict": False},
+        "json_schema": {"name": "structured_output", "schema": schema, "strict": False},
     }
 
 
@@ -175,7 +199,10 @@ def test_chat_completion_json_schema_wins_over_json_mode(mock_openai):
     resp.usage = None
     mock_openai.return_value.chat.completions.create.return_value = resp
 
-    client = LLMClient("https://api.example.com/v1", "key", "model-a")
+    client = LLMClient(
+        "https://api.example.com/v1", "key", "model-a",
+        provider="gemini", capability_overrides={"supports_json_schema": True},
+    )
     client.chat_completion(
         [{"role": "user", "content": "hi"}], json_mode=True, json_schema={"type": "object"}
     )
@@ -304,3 +331,59 @@ def test_chat_completion_zero_tokens_when_usage_absent(mock_openai):
     assert result.prompt_tokens == 0
     assert result.completion_tokens == 0
     assert result.total_tokens == 0
+
+
+@patch("agent.llm.OpenAI")
+def test_chat_completion_json_schema_degrades_to_json_object(mock_openai):
+    resp = MagicMock()
+    resp.choices[0].message.content = "{}"
+    resp.model = "model-a"
+    resp.usage = None
+    mock_openai.return_value.chat.completions.create.return_value = resp
+
+    client = LLMClient("https://api.example.com/v1", "key", "model-a", provider="deepseek")
+    client.chat_completion([{"role": "user", "content": "hi"}], json_schema={"type": "object"})
+
+    kwargs = mock_openai.return_value.chat.completions.create.call_args.kwargs
+    assert kwargs["response_format"] == {"type": "json_object"}
+
+
+@patch("agent.llm.OpenAI")
+def test_chat_completion_without_user_message_raises(mock_openai):
+    client = LLMClient("https://api.example.com/v1", "key", "model-a", provider="deepseek")
+    with pytest.raises(LLMError):
+        client.chat_completion([{"role": "system", "content": "rules"}])
+    mock_openai.return_value.chat.completions.create.assert_not_called()
+
+
+@patch("agent.llm.OpenAI")
+def test_chat_completion_no_structured_output_omits_response_format(mock_openai):
+    resp = MagicMock()
+    resp.choices[0].message.content = "x"
+    resp.model = "model-a"
+    resp.usage = None
+    mock_openai.return_value.chat.completions.create.return_value = resp
+
+    client = LLMClient("https://api.example.com/v1", "key", "model-a", provider="deepseek")
+    result = client.chat_completion([{"role": "user", "content": "hi"}])
+    assert result.text == "x"
+
+    kwargs = mock_openai.return_value.chat.completions.create.call_args.kwargs
+    assert "response_format" not in kwargs
+
+
+@patch("agent.llm.OpenAI")
+def test_constructor_builds_capabilities_from_args(mock_openai):
+    client = LLMClient(
+        "https://api.example.com/v1", "key", "model-a",
+        provider="gemini", capability_overrides={"supports_json_schema": True},
+    )
+    assert client.capabilities.provider == "gemini"
+    assert client.capabilities.supports_json_schema is True
+
+
+@patch("agent.llm.OpenAI")
+def test_constructor_defaults_to_unknown(mock_openai):
+    client = LLMClient("https://api.example.com/v1", "key", "model-a")
+    assert client.capabilities.provider == "unknown"
+    assert client.capabilities.supports_json_schema is False

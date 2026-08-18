@@ -176,36 +176,32 @@ own usage recorder, so disabling observability does not affect evaluation.
 
 ### Unit tests
 
-Run the full unit suite (no API key required — the LLM client is mocked):
+`tests/unit/` is the hermetic unit-test tier. It never calls a live API (the
+LLM client is mocked) and is the default run:
 
 ```bash
 uv run pytest -q
 ```
 
-### Smoke tests
+### Live tests
 
-`tests/test_smoke.py` exercises the real agent end-to-end against the API:
-a single-shot `--ask` question returns a non-empty answer, and an
-out-of-domain question returns the rejection reply.
+`live/` exercises the real agent against the LLM API: `test_smoke.py` runs a
+single-shot `--ask` question, an out-of-domain question, and a minimal
+evaluation run that writes a result file, all end-to-end; `test_integration.py`
+runs a complex gated question through the Orchestrator (Planner → Workers →
+Aggregator) and a medium question through a strategy.
 
-```bash
-uv run pytest tests/test_smoke.py -v
-```
-
-### Integration tests
-
-`tests/test_integration.py` exercises deeper pipeline paths against the API:
-a complex gated question runs through the Orchestrator (Planner → Workers →
-Aggregator), and a medium question flows through a strategy.
+Live tests run only when you opt in explicitly and `AGENT_API_KEY` is set.
+Run them from the repo root:
 
 ```bash
-uv run pytest tests/test_integration.py -v
+uv run pytest live -v
 ```
 
 ### API key security
 
-The smoke and integration tests need a real `AGENT_API_KEY` and skip
-automatically when it is not set. Provide it **only** through a secure
+The live tests need a real `AGENT_API_KEY` and skip automatically when it is
+not set. Provide it **only** through a secure
 channel — an environment variable, a secret manager, or a CI secret — and
 never hardcode it in code or commit it to the repository:
 

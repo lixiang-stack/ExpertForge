@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import json
-import re
 from dataclasses import dataclass
 
 from .config import COMPLEXITY_LEVELS, ComplexityPolicy, DomainConfig, IntentDef
-from .llm import LLMClient, LLMError
+from .llm import LLMClient
+from .parsing import parse_json
 
 
 @dataclass
@@ -48,8 +47,6 @@ Rules:
   {complexity_section}
 - Output ONLY a single JSON object and nothing else.
 - JSON format: {{"in_domain": true|false, "intent": "<intent id or null>", "complexity": "<simple|medium|complex or null>", "reason": "one-sentence justification"}}
-
-User question: {question}
 """
 
 
@@ -80,7 +77,6 @@ def build_classification_prompt(
     name: str,
     description: str,
     intents: list[IntentDef],
-    question: str,
     complexity: ComplexityPolicy | None = None,
 ) -> str:
     lines: list[str] = []
@@ -104,19 +100,7 @@ def build_classification_prompt(
         description=description,
         intents=intents_block,
         complexity_section=build_complexity_section(complexity),
-        question=question,
     )
-
-
-def _parse(text: str) -> dict | None:
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
-        return None
-    try:
-        data = json.loads(match.group(0))
-    except json.JSONDecodeError:
-        return None
-    return data if isinstance(data, dict) else None
 
 
 def validate_classification(data: dict | None, intent_ids: list[str]) -> ClassificationResult:
@@ -147,18 +131,6 @@ def validate_classification(data: dict | None, intent_ids: list[str]) -> Classif
     )
 
 
-_DEGRADED_INSTRUCTION = """
-
-Answer in JSON only, using exactly this structure:
-{
-  "in_domain": true or false,
-  "intent": "one of the available intent ids, or null when out of domain",
-  "complexity": "simple" | "medium" | "complex" or null when out of domain,
-  "reason": "one-sentence justification"
-}
-"""
-
-
 class ClassificationService:
     def __init__(self, client: LLMClient, domain: DomainConfig):
         self.client = client
@@ -169,37 +141,17 @@ class ClassificationService:
         schema = build_classification_schema(intent_ids)
         prompt = build_classification_prompt(
             self.domain.name, self.domain.description,
-            list(self.domain.intents.values()), question,
+            list(self.domain.intents.values()),
             complexity=self.domain.complexity,
         )
-        messages = [{"role": "system", "content": prompt}]
-        # TODO: prefer json_schema structured output once the model/provider supports it.
-        # The current provider rejects response_format=json_schema, so json_object
-        # (json_mode) is the main path for now. The json_schema path below is kept
-        # (commented out) for when a provider with json_schema support is used.
-        #
-        # try:
-        #     text = self.client.chat_completion(
-        #         messages,
-        #         model=model,
-        #         disable_thinking=True,
-        #         json_schema=schema,
-        #     )
-        # except LLMError:
-        #     # Provider rejected json_schema (capability issue): degrade once.
-        #     degraded_messages = [
-        #         {"role": "system", "content": prompt + _DEGRADED_INSTRUCTION}
-        #     ]
-        #     text = self.client.chat_completion(
-        #         degraded_messages,
-        #         model=model,
-        #         disable_thinking=True,
-        #         json_mode=True,
-        #     )
+        messages = [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": question},
+        ]
         result = self.client.chat_completion(
             messages,
             model=model,
             disable_thinking=True,
-            json_mode=True,
+            json_schema=schema,
         )
-        return validate_classification(_parse(result.text), intent_ids)
+        return validate_classification(parse_json(result.text), intent_ids)

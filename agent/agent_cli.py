@@ -36,7 +36,9 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     client = LLMClient(base_url=config.base_url, api_key=api_key, model=config.model,
-                       timeout=effective_timeout(config))
+                       timeout=effective_timeout(config),
+                       provider=config.provider,
+                       capability_overrides=config.provider_capabilities)
     client, _obs_plugin = install(client, config, domain)
     try:
         if ask is not None:

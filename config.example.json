@@ -4,6 +4,11 @@
   "model_low": "",
   "model_high": "",
   "domain_dir": "domain/software_engineering",
+  "provider": "deepseek",
+  "provider_capabilities": {
+    "supports_json_schema": false,
+    "supports_thinking_toggle": true
+  },
   "orchestrator": {
     "max_workers": 4,
     "worker_timeout": 120

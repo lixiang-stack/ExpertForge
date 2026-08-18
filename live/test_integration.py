@@ -7,7 +7,7 @@ These skip automatically when `AGENT_API_KEY` is not set. Provide the key via
 the environment / secret manager / CI secret — never hardcode or commit it:
 
     export AGENT_API_KEY=your_key
-    uv run pytest tests/test_integration.py -v
+    uv run pytest live -v
 """
 
 import json
@@ -19,6 +19,7 @@ import pytest
 from agent.chat import Chat
 from agent.config import load_config, load_domain_config
 from agent.llm import LLMClient
+from tests.helpers import absolutize_domain_dir, resolve_live_config_src
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -31,10 +32,9 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture(scope="module")
 def live_chat(tmp_path_factory):
     """Build a real Chat wired to the live API (domain_dir made absolute)."""
-    example = json.loads((REPO_ROOT / "config.example.json").read_text(encoding="utf-8"))
     config_path = tmp_path_factory.mktemp("live") / "config.json"
     config_path.write_text(
-        json.dumps({**example, "domain_dir": str(REPO_ROOT / example["domain_dir"])}),
+        json.dumps(absolutize_domain_dir(resolve_live_config_src(REPO_ROOT), REPO_ROOT)),
         encoding="utf-8",
     )
     config = load_config(str(config_path))

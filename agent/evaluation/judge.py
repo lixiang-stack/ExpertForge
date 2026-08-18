@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import json
-import re
-
 from agent.llm import LLMClient, LLMError
+from agent.parsing import parse_json
 
 JUDGE_DIMENSIONS = (
     "correctness",
@@ -15,8 +13,6 @@ JUDGE_DIMENSIONS = (
 )
 
 _JUDGE_PROMPT = """You are a strict evaluator of technical answers.
-
-Question: {question}
 
 Agent answer:
 {answer}
@@ -34,28 +30,19 @@ Output ONLY a single JSON object:
 """
 
 
-def build_judge_prompt(question: str, answer: str, *, reference: str | None = None) -> str:
+def build_judge_prompt(answer: str, *, reference: str | None = None) -> str:
     reference_block = (
         f"\nGround truth reference:\n{reference}" if reference else "\nNo reference provided."
     )
     return _JUDGE_PROMPT.format(
-        question=question,
         answer=answer,
         reference_block=reference_block,
     )
 
 
 def parse_scorecard(text: str | None) -> dict | None:
-    if not text:
-        return None
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
-        return None
-    try:
-        data = json.loads(match.group(0))
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(data, dict):
+    data = parse_json(text) if text else None
+    if data is None:
         return None
     for dim in JUDGE_DIMENSIONS:
         value = data.get(dim)
@@ -70,8 +57,11 @@ class Judge:
         self.model = model
 
     def score(self, question: str, answer: str, *, reference: str | None = None) -> dict | None:
-        prompt = build_judge_prompt(question, answer, reference=reference)
-        messages = [{"role": "system", "content": prompt}]
+        prompt = build_judge_prompt(answer, reference=reference)
+        messages = [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": question},
+        ]
         try:
             result = self.client.chat_completion(
                 messages,
