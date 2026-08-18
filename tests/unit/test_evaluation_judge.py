@@ -21,9 +21,9 @@ class FakeClient:
         return ChatResult(text=self.response, model=model or "m")
 
 
-def test_build_judge_prompt_contains_question_answer_and_dimensions():
-    prompt = build_judge_prompt("q?", "the answer", reference="ground truth")
-    assert "q?" in prompt
+def test_build_judge_prompt_contains_answer_and_dimensions():
+    prompt = build_judge_prompt("the answer", reference="ground truth")
+    assert "q?" not in prompt
     assert "the answer" in prompt
     assert "ground truth" in prompt
     for d in JUDGE_DIMENSIONS:
@@ -63,6 +63,9 @@ def test_judge_returns_scorecard():
     assert model == "judge-a"
     assert dt is True
     assert jm is True
+    assert messages[1]["role"] == "user"
+    assert messages[1]["content"] == "q?"
+    assert "q?" not in messages[0]["content"]
 
 
 def test_judge_error_returns_none():

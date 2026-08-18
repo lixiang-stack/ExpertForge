@@ -5,7 +5,7 @@ provide the key through the environment (or your secret manager / CI secret) —
 never hardcode or commit it:
 
     export AGENT_API_KEY=your_key
-    uv run pytest tests/test_smoke.py -v
+    uv run pytest live -v
 """
 
 import json
@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from agent import agent_cli
+from tests.helpers import absolutize_domain_dir, resolve_live_config_src
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -26,11 +27,10 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture(scope="module")
 def live_config(tmp_path_factory):
-    """Write a real config.json (base_url/model/domain from config.example.json)."""
-    example = json.loads((REPO_ROOT / "config.example.json").read_text(encoding="utf-8"))
+    """Write a real config.json, preferring the user's config.json over the example."""
     config_path = tmp_path_factory.mktemp("live") / "config.json"
     config_path.write_text(
-        json.dumps({**example, "domain_dir": str(REPO_ROOT / example["domain_dir"])}),
+        json.dumps(absolutize_domain_dir(resolve_live_config_src(REPO_ROOT), REPO_ROOT)),
         encoding="utf-8",
     )
     return str(config_path)

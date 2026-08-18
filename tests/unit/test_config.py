@@ -15,6 +15,11 @@ from agent.config import (
 
 
 def _write_config(tmp_path, data):
+    data = {
+        "provider": "test",
+        "provider_capabilities": {},
+        **data,
+    }
     path = tmp_path / "config.json"
     path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     return str(path)
@@ -146,6 +151,8 @@ def test_default_config_falls_back_to_example(tmp_path, monkeypatch):
         "base_url": "https://api.example.com/v1",
         "model": "model-a",
         "domain_dir": "domain/software_engineering",
+        "provider": "test",
+        "provider_capabilities": {},
     }), encoding="utf-8")
     cfg = load_config()
     assert cfg.base_url == "https://api.example.com/v1"
@@ -166,6 +173,8 @@ def test_explicit_missing_path_no_fallback(tmp_path, monkeypatch):
         "base_url": "https://api.example.com/v1",
         "model": "model-a",
         "domain_dir": "d",
+        "provider": "test",
+        "provider_capabilities": {},
     }), encoding="utf-8")
     with pytest.raises(ConfigError):
         load_config(str(tmp_path / "config.json"))
@@ -778,3 +787,73 @@ def test_load_config_timeout_invalid_is_none(tmp_path, monkeypatch):
     })
     cfg = load_config(path)
     assert cfg.timeout is None
+
+
+def test_load_config_provider_and_capabilities_parsed(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "provider": "gemini",
+        "provider_capabilities": {"supports_json_schema": True},
+    })
+    cfg = load_config(path)
+    assert cfg.provider == "gemini"
+    assert cfg.provider_capabilities == {
+        "supports_json_schema": True,
+    }
+
+
+def test_load_config_missing_provider_raises(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "provider_capabilities": {},
+    }), encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(str(path))
+
+
+def test_load_config_missing_capabilities_raises(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "provider": "gemini",
+    }), encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(str(path))
+
+
+def test_load_config_unknown_capability_key_raises(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "provider": "gemini",
+        "provider_capabilities": {"supports_magic": True},
+    }), encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(str(path))
+
+
+def test_load_config_non_boolean_capability_raises(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "provider": "gemini",
+        "provider_capabilities": {"supports_json_schema": "yes"},
+    }), encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(str(path))

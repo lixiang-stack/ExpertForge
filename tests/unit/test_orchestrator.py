@@ -68,11 +68,14 @@ def test_run_normal_path_planner_workers_aggregator():
     result = Orchestrator(client, _config(), _domain()).run("huge task", _route(), "high-a")
     assert result == "final answer"
     assert len(client.calls) == 4
-    # planner call uses json_object (json_mode=True); json_schema preserved but unused
+    # planner call expresses json_schema intent; json_mode is not passed
     planner_messages, planner_model, planner_dt, planner_jm, planner_schema = client.calls[0]
-    assert planner_schema is None
-    assert planner_jm is True
+    assert planner_schema is not None
+    assert planner_jm is False
     assert planner_dt is True
+    assert planner_messages[1]["role"] == "user"
+    assert planner_messages[1]["content"] == "huge task"
+    assert "huge task" not in planner_messages[0]["content"]
     for _, model, dt, jm, schema in client.calls:
         assert model == "high-a"
 
@@ -133,9 +136,8 @@ def test_run_worker_empty_output_still_aggregates():
     assert "worker1 output" in agg_user
 
 
-def test_run_planner_uses_json_object_main_path():
-    """The planner's main path uses json_object (json_mode=True); json_schema is
-    preserved but not exercised until a provider supports it (see code TODO)."""
+def test_run_planner_uses_json_schema_intent():
+    """The planner expresses json_schema intent; the client negotiates the mechanism."""
     client = FakeClient([
         '{"tasks": [{"title": "t1", "instruction": "i1", "role": "R1"}]}',
         "worker1 output",
@@ -144,8 +146,8 @@ def test_run_planner_uses_json_object_main_path():
     result = Orchestrator(client, _config(), _domain()).run("huge task", _route(), "high-a")
     assert result == "final answer"
     planner_messages, planner_model, planner_dt, planner_jm, planner_schema = client.calls[0]
-    assert planner_schema is None
-    assert planner_jm is True
+    assert planner_schema is not None
+    assert planner_jm is False
     assert planner_dt is True
 
 

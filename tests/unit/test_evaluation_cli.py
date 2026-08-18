@@ -41,7 +41,8 @@ def test_main_run_prints_summary_and_writes_file(tmp_path, monkeypatch):
     config_dir.mkdir()
     config_path = config_dir / "config.json"
     config_path.write_text(
-        f'{{"base_url": "https://x", "model": "m", "domain_dir": "{domain_dir}"}}',
+        f'{{"base_url": "https://x", "model": "m", "domain_dir": "{domain_dir}", '
+        f'"provider": "test", "provider_capabilities": {{}}}}',
         encoding="utf-8",
     )
 
@@ -138,7 +139,9 @@ def _suite_cli_env(tmp_path):
     config_dir.mkdir()
     config_path = config_dir / "config.json"
     config_path.write_text(
-        f'{{"base_url": "https://x", "model": "m", "domain_dir": "{domain_dir}"}}',
+        '{"base_url": "https://x", "model": "m", "domain_dir": "%s", '
+        '"provider": "test", "provider_capabilities": {}}'
+        % domain_dir,
         encoding="utf-8",
     )
     return config_path, suite_dir
@@ -235,6 +238,47 @@ def test_main_diff(tmp_path, monkeypatch):
     rc = eval_main.main(["diff", str(a), str(b)])
     assert rc == 0
     assert "domain_accuracy" in out.getvalue()
+
+
+def test_main_passes_provider_and_capability_overrides_from_config(tmp_path, monkeypatch):
+    config_path, suite_dir = _suite_cli_env(tmp_path)
+    with open(config_path, encoding="utf-8") as f:
+        data = json.load(f)
+    data["provider"] = "gemini"
+    data["provider_capabilities"] = {"supports_json_schema": True}
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+
+    captured = {}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            captured.update(kwargs)
+
+        def chat_completion(self, messages, model=None, temperature=0.3,
+                            disable_thinking=False, json_mode=False, json_schema=None):
+            return ChatResult(
+                text='{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}',
+                model=model or "m",
+            )
+
+        def chat_completion_stream(self, messages, **kwargs):
+            return iter([])
+
+    monkeypatch.setattr(eval_main, "LLMClient", FakeClient)
+    import io
+    import sys
+
+    out = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", out)
+    rc = eval_main.main([
+        "run", "--config", str(config_path), "--dataset", str(suite_dir),
+        "--label", "pc", "--results-dir", str(tmp_path / "r"), "--skip-quality",
+    ])
+    assert rc == 0
+    assert captured["provider"] == "gemini"
+    assert captured["capability_overrides"] == {"supports_json_schema": True}
 
 
 def _result_record(domain_accuracy):
@@ -338,7 +382,8 @@ def test_main_bad_dataset_returns_1(tmp_path, monkeypatch, capsys):
     config_dir.mkdir()
     config_path = config_dir / "config.json"
     config_path.write_text(
-        f'{{"base_url": "https://x", "model": "m", "domain_dir": "{domain_dir}"}}',
+        f'{{"base_url": "https://x", "model": "m", "domain_dir": "{domain_dir}", '
+        f'"provider": "test", "provider_capabilities": {{}}}}',
         encoding="utf-8",
     )
     monkeypatch.delenv("AGENT_BASE_URL", raising=False)

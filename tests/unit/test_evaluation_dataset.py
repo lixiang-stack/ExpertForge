@@ -121,7 +121,7 @@ def test_load_suites_invalid_complexity(tmp_path):
 def test_load_committed_software_engineering_suites():
     from pathlib import Path
 
-    repo = Path(__file__).resolve().parents[1]
+    repo = Path(__file__).resolve().parents[2]
     path = repo / "evaluation" / "datasets" / "software_engineering"
     suites = load_suites(str(path))
     names = [s.name for s in suites]

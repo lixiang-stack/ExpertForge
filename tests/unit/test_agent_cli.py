@@ -10,6 +10,8 @@ def _write_root_config(tmp_path, domain_dir):
         "base_url": "https://x/v1",
         "model": "m",
         "domain_dir": domain_dir,
+        "provider": "test",
+        "provider_capabilities": {},
     }), encoding="utf-8")
     return str(path)
 
@@ -90,3 +92,32 @@ def test_main_ask_prints_answer(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(agent_cli, "LLMClient", lambda *a, **k: FakeClient())
     assert agent_cli.main([str(config_path), "--ask", "what is defer"]) == 0
     assert "one-shot answer" in capsys.readouterr().out
+
+
+def test_main_passes_provider_and_capability_overrides_from_config(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
+    config_path = _write_root_config(tmp_path, _write_domain(tmp_path))
+    with open(config_path, encoding="utf-8") as f:
+        data = json.load(f)
+    data["provider"] = "gemini"
+    data["provider_capabilities"] = {"supports_json_schema": True}
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+
+    captured = {}
+
+    class FakeClient:
+        def chat_completion(
+            self, messages, model=None, disable_thinking=False, json_mode=False, json_schema=None
+        ):
+            return ChatResult(
+                text='{"in_domain": false, "intent": null, "complexity": null, "reason": "x"}',
+                model=model or "m",
+            )
+
+    monkeypatch.setattr(agent_cli, "LLMClient",
+                        lambda *a, **k: captured.update(k) or FakeClient())
+    assert agent_cli.main([str(config_path), "--ask", "hi"]) == 0
+    assert captured["provider"] == "gemini"
+    assert captured["capability_overrides"] == {"supports_json_schema": True}

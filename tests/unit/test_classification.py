@@ -56,9 +56,12 @@ def test_classify_single_call_returns_all_fields():
     messages, model, disable_thinking, json_mode, json_schema = client.calls[0]
     assert model == "cm"
     assert disable_thinking is True
-    assert json_mode is True
-    assert json_schema is None
+    assert json_mode is False
+    assert json_schema is not None
     assert "intent" in messages[0]["content"]
+    assert messages[1]["role"] == "user"
+    assert messages[1]["content"] == "what is a pointer?"
+    assert "what is a pointer?" not in messages[0]["content"]
 
 
 def test_classify_garbage_text_falls_back_reject():
@@ -78,8 +81,8 @@ def test_classify_out_of_domain_accepts_null():
     assert result.intent is None
     assert result.complexity is None
     assert len(client.calls) == 1
-    assert client.calls[0][3] is True  # json_mode is the main path
-    assert client.calls[0][4] is None  # json_schema preserved but unused
+    assert client.calls[0][3] is False   # json_mode is not passed; intent is json_schema
+    assert client.calls[0][4] is not None  # json_schema intent; client negotiates the mechanism
 
 
 def test_validate_non_bool_in_domain_falls_back_reject():
@@ -133,9 +136,9 @@ def test_schema_enum_derived_from_intent_ids():
     assert schema["required"] == ["in_domain", "intent", "complexity", "reason"]
 
 
-def test_classify_uses_json_mode_main_path():
-    """The main path uses json_object (json_mode=True); json_schema is preserved
-    but not exercised until a provider supports it (see code TODO)."""
+def test_classify_uses_json_schema_intent():
+    """The main path passes json_schema as the structured-output intent; the
+    client negotiates the actual mechanism (json_schema vs json_object)."""
     client = FakeClient([
         '{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}',
     ])
@@ -143,8 +146,8 @@ def test_classify_uses_json_mode_main_path():
     assert result.in_domain is True
     assert len(client.calls) == 1
     messages, model, disable_thinking, json_mode, json_schema = client.calls[0]
-    assert json_mode is True
-    assert json_schema is None
+    assert json_mode is False
+    assert json_schema is not None
 
 
 def test_classify_api_failure_propagates():
@@ -174,7 +177,6 @@ def test_build_classification_prompt_renders_examples_and_boundaries():
         "SE",
         "software engineering",
         [_rich_intent()],
-        "why DI?",
     )
     assert "concept_explain: explain a concept" in prompt
     assert "Why does DI reduce coupling?" in prompt
@@ -187,7 +189,6 @@ def test_build_classification_prompt_omits_empty_sections():
         "SE",
         "software engineering",
         [IntentDef("faq", "quick factual question")],
-        "what is a hash?",
     )
     assert "faq: quick factual question" in prompt
     assert "Positive examples" not in prompt
@@ -237,7 +238,6 @@ def test_build_classification_prompt_renders_complexity_policy():
     prompt = build_classification_prompt(
         "SE", "software engineering",
         [IntentDef("faq", "quick factual question")],
-        "what is a hash?",
         complexity=_complexity_policy(),
     )
     assert "single clear concept, single fact" in prompt

@@ -7,6 +7,8 @@ from pathlib import Path
 
 import yaml
 
+from .capabilities import KNOWN_CAPABILITY_KEYS
+
 
 class ConfigError(Exception):
     """Raised when configuration is invalid or incomplete."""
@@ -46,6 +48,8 @@ class AgentConfig:
     model_low: str | None = None
     model_high: str | None = None
     timeout: float | None = None
+    provider: str = ""
+    provider_capabilities: dict[str, bool] = field(default_factory=dict)
     observability: ObservabilityConfig | None = None
     evaluation: EvaluationConfig | None = None
     orchestrator: OrchestratorConfig | None = None
@@ -137,6 +141,25 @@ def load_config(path: str | None = None) -> AgentConfig:
             else 120.0,
         )
 
+    provider = raw.get("provider")
+    if not isinstance(provider, str) or not provider:
+        raise ConfigError("Missing 'provider' in config (e.g. 'deepseek' or 'gemini').")
+
+    raw_caps = raw.get("provider_capabilities")
+    if not isinstance(raw_caps, dict):
+        raise ConfigError(
+            "Missing 'provider_capabilities' in config; declare the provider's capabilities."
+        )
+    for key, value in raw_caps.items():
+        if key not in KNOWN_CAPABILITY_KEYS:
+            raise ConfigError(
+                f"Unknown capability '{key}' in provider_capabilities. "
+                f"Known capabilities: {', '.join(KNOWN_CAPABILITY_KEYS)}."
+            )
+        if not isinstance(value, bool):
+            raise ConfigError(f"Capability '{key}' must be a boolean in provider_capabilities.")
+    provider_capabilities = dict(raw_caps)
+
     return AgentConfig(
         base_url=base_url,
         model=model,
@@ -145,6 +168,8 @@ def load_config(path: str | None = None) -> AgentConfig:
         model_low=model_low,
         model_high=model_high,
         timeout=timeout,
+        provider=provider,
+        provider_capabilities=provider_capabilities,
         observability=observability,
         evaluation=evaluation,
         orchestrator=orchestrator,
