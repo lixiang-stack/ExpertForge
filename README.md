@@ -16,8 +16,10 @@ or the single-shot `--ask` entry point.
   Aggregator).
 - **Model tiers**: optional `model_low`/`model_high` tiers for cheap/fast
   answers, falling back to `model`.
-- **Golden-dataset evaluation**: classification, routing, answer quality, and
-  cost metrics, with result diffing and committed baseline tracking.
+- **Layered evaluation**: cases carry a `tier` (classification / routing /
+  full_expert) controlling execution depth and cost; runs select by `--tier`
+  or default to a curated smoke set, with per-tier metrics and failure-driven
+  case growth.
 - **Observability**: optional token/cost tracing per LLM call and a
   self-contained HTML report.
 - **Logging**: optional structlog JSONL logs covering lifecycle, routing,
@@ -48,11 +50,14 @@ uv run python -m agent --ask "How do I ..."
 
 A specific config file works too: `uv run python -m agent path/to/config.json`.
 
-Evaluate against the golden dataset (needs `AGENT_API_KEY`):
+Evaluate against the layered dataset (needs `AGENT_API_KEY`):
 
 ```bash
-uv run python -m agent.evaluation run
-uv run python -m agent.evaluation run --suite direct teaching
+uv run python -m agent.evaluation run                        # default: curated smoke cases (~5)
+uv run python -m agent.evaluation run --tier classification  # classification tier only (cheap)
+uv run python -m agent.evaluation run --tier classification routing   # classification + routing
+uv run python -m agent.evaluation run --tier full_expert     # full expert cases (full pipeline + judge)
+uv run python -m agent.evaluation run --tier all             # full regression (all tiers)
 ```
 
 ## Configuration
@@ -92,12 +97,13 @@ uv run python -m agent.observability report --day 2026-08-11  # filter to one da
 Evaluation runs (all need `AGENT_API_KEY`; a judge block also needs `AGENT_JUDGE_API_KEY`):
 
 ```bash
-uv run python -m agent.evaluation run                        # full run (all metrics)
-uv run python -m agent.evaluation run --skip-quality         # classification/routing/cost only
+uv run python -m agent.evaluation run                        # smoke: curated ~5 cases (default)
+uv run python -m agent.evaluation run --tier classification  # classification tier only (cheap)
+uv run python -m agent.evaluation run --tier classification routing  # classification + routing
+uv run python -m agent.evaluation run --tier full_expert     # full expert cases (full pipeline + judge)
+uv run python -m agent.evaluation run --tier all             # full regression
 uv run python -m agent.evaluation run --label my-run         # named result file
 uv run python -m agent.evaluation run --results-dir out/     # override the results dir
-uv run python -m agent.evaluation run --suite direct teaching  # run specific suites by name
-uv run python -m agent.evaluation run --max-per-suite 5      # cap cases per suite
 uv run python -m agent.evaluation run --config path.json     # custom agent config
 ```
 

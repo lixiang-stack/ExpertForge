@@ -59,7 +59,8 @@ def test_smoke_evaluation_writes_result(live_config, tmp_path, monkeypatch):
         'cases:\n'
         '  - id: smoke-1\n'
         '    question: "What is Go defer?"\n'
-        '    answer_quality: false\n'
+        '    tier: classification\n'
+        '    smoke: true\n'
         '    expected:\n'
         '      domain: software_engineering\n'
         '      intent: faq\n'
@@ -72,8 +73,7 @@ def test_smoke_evaluation_writes_result(live_config, tmp_path, monkeypatch):
     rc = eval_main.main(["run", "--config", live_config,
                          "--dataset", str(dataset_dir),
                          "--label", "smoke",
-                         "--results-dir", str(results_dir),
-                         "--skip-quality"])
+                         "--results-dir", str(results_dir)])
     assert rc == 0
     files = list(results_dir.glob("*-smoke.json"))
     assert files, "expected a result file to be written"

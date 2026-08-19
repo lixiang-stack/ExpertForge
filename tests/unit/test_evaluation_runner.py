@@ -10,14 +10,14 @@ def _dataset():
             expected_domain="software_engineering",
             expected_intent="faq", expected_complexity="simple",
             expected_strategy="direct", expected_orchestrate=False,
-            answer_quality=True, reference="short",
+            tier="full_expert", reference="short",
         ),
         EvalCase(
             id="se-002", question="recommend a restaurant",
             expected_domain="other",
             expected_intent=None, expected_complexity=None,
             expected_strategy="reject", expected_orchestrate=False,
-            answer_quality=False, reference=None,
+            tier="classification", reference=None,
         ),
     ])
 
@@ -129,14 +129,14 @@ def test_run_evaluation_uses_dedicated_judge_client():
             expected_domain="software_engineering",
             expected_intent="faq", expected_complexity="simple",
             expected_strategy="direct", expected_orchestrate=False,
-            answer_quality=True, reference="short",
+            tier="full_expert", reference="short",
         ),
         EvalCase(
             id="se-002", question="what is a monad",
             expected_domain="software_engineering",
             expected_intent="faq", expected_complexity="simple",
             expected_strategy="direct", expected_orchestrate=False,
-            answer_quality=True, reference="medium",
+            tier="full_expert", reference="medium",
         ),
     ])
     client = FakeClient([
@@ -210,9 +210,12 @@ def test_run_evaluation_without_judge_client_uses_main_client_for_judge():
 def test_run_evaluation_rejects_out_of_domain():
     client = FakeClient([
         '{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}',
+        "the answer",
+        '{"correctness": 4, "relevance": 5, "completeness": 3, '
+        '"technical_depth": 4, "practical_usefulness": 5, "hallucination": 4}',
         '{"in_domain": false, "intent": null, "complexity": null, "reason": "unrelated"}',
     ])
-    results = run_evaluation(_config(), _domain(), _dataset(), client, skip_quality=True)
+    results = run_evaluation(_config(), _domain(), _dataset(), client)
     r1 = results[1]
     assert r1.in_domain is False
     assert r1.strategy == "reject"
@@ -222,26 +225,34 @@ def test_run_evaluation_rejects_out_of_domain():
     assert r1.actual_model is None  # out-of-domain: no answer call
 
 
-def test_run_evaluation_skip_quality_skips_answer():
+def test_run_evaluation_classification_tier_skips_answer():
+    suite = Suite(name="direct", domain="software_engineering", cases=[
+        EvalCase(id="se-001", question="what is defer",
+                 expected_domain="software_engineering",
+                 expected_intent="faq", expected_complexity="simple",
+                 expected_strategy="direct", expected_orchestrate=False,
+                 tier="classification", reference="short"),
+    ])
     client = FakeClient([
         '{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}',
-        '{"in_domain": false, "intent": null, "complexity": null, "reason": "unrelated"}',
     ])
-    results = run_evaluation(_config(), _domain(), _dataset(), client, skip_quality=True)
+    client._record_usage(10, 5, cached=2)
+    results = run_evaluation(_config(), _domain(), suite, client)
     r0 = results[0]
     assert r0.answer is None
     assert r0.scorecard is None
     assert r0.llm_calls == 1
 
 
-def test_run_evaluation_records_suite():
+def test_run_evaluation_records_suite_and_tier():
     client = FakeClient([
         '{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}',
         '{"in_domain": false, "intent": null, "complexity": null, "reason": "unrelated"}',
     ])
-    results = run_evaluation(_config(), _domain(), _dataset(), client, skip_quality=True)
+    results = run_evaluation(_config(), _domain(), _dataset(), client)
     assert results[0].suite == "direct"
-    assert results[1].suite == "direct"
+    assert results[0].tier == "full_expert"
+    assert results[1].tier == "classification"
 
 
 def test_run_evaluation_records_answer_error_and_continues():

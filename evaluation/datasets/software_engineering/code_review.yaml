@@ -1,0 +1,5 @@
+cases:
+  - id: se-090
+    tier: routing
+    question: "Review this Python function for correctness and style: <code>def sum(a, b): return a + b  # never used</code>"
+    expected: {domain: software_engineering, intent: code_review, complexity: simple, strategy: analysis, orchestrate: false}

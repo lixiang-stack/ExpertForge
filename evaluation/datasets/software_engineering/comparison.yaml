@@ -1,0 +1,9 @@
+cases:
+  - id: se-081
+    tier: routing
+    question: "Compare the Go defer statement with C++ RAII for resource management."
+    expected: {domain: software_engineering, intent: comparison, complexity: simple, strategy: analysis, orchestrate: false}
+  - id: se-125
+    tier: routing
+    question: "Compare gRPC vs REST for microservices."
+    expected: {domain: software_engineering, intent: comparison, complexity: medium, strategy: analysis, orchestrate: false}

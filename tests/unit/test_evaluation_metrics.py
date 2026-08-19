@@ -1,15 +1,15 @@
 from agent.evaluation.dataset import Suite, EvalCase
-from agent.evaluation.metrics import _accuracy, compute_metrics
+from agent.evaluation.metrics import _accuracy, case_failures, compute_metrics, compute_metrics_by_tier, failed_cases
 from agent.evaluation.runner import CaseResult
 
 
 def _case(cid, domain="software_engineering", intent="faq", complexity="simple",
-          strategy="direct", orchestrate=False):
+          strategy="direct", orchestrate=False, tier="classification"):
     return EvalCase(
         id=cid, question=f"q {cid}",
         expected_domain=domain, expected_intent=intent,
         expected_complexity=complexity, expected_strategy=strategy,
-        expected_orchestrate=orchestrate, answer_quality=True, reference=None,
+        expected_orchestrate=orchestrate, tier=tier, reference=None,
     )
 
 
@@ -168,3 +168,55 @@ def test_n_failed_zero_without_errors():
     cases = [_case("a")]
     m = _m(cases, [_result(cases[0])])
     assert m["n_failed"] == 0
+
+
+def test_per_strategy_accuracy():
+    cases = [_case("a", strategy="direct"), _case("b", strategy="teaching"),
+             _case("c", strategy="direct")]
+    results = [
+        _result(cases[0], strategy="direct"),
+        _result(cases[1], strategy="teaching"),
+        _result(cases[2], strategy="teaching"),  # wrong
+    ]
+    m = _m(cases, results)
+    ps = m["routing"]["per_strategy"]
+    assert ps["direct"] == 0.5
+    assert ps["teaching"] == 1.0
+
+
+def test_metrics_by_tier():
+    cases = [_case("a", tier="classification"), _case("b", tier="routing"),
+             _case("c", tier="full_expert")]
+    results = [_result(cases[0]), _result(cases[1]), _result(cases[2])]
+    by_tier = compute_metrics_by_tier(cases, results, domain="software_engineering")
+    assert list(by_tier) == ["classification", "routing", "full_expert"]
+    assert by_tier["classification"]["n_cases"] == 1
+    assert by_tier["routing"]["n_cases"] == 1
+    assert by_tier["full_expert"]["n_cases"] == 1
+
+
+def test_metrics_by_tier_empty_tier_zeroed():
+    cases = [_case("a", tier="classification")]
+    results = [_result(cases[0])]
+    by_tier = compute_metrics_by_tier(cases, results, domain="software_engineering")
+    assert by_tier["full_expert"]["n_cases"] == 0
+    assert by_tier["full_expert"]["classification"]["domain_accuracy"] is None
+
+
+def test_case_failures():
+    case = _case("a", tier="classification")
+    assert case_failures(case, _result(case), "software_engineering") == []
+    bad = _result(case, intent="concept_explain", strategy="teaching")
+    reasons = case_failures(case, bad, "software_engineering")
+    assert any("intent mismatch" in r for r in reasons)
+    assert any("strategy mismatch" in r for r in reasons)
+
+
+def test_failed_cases_lists_only_failures():
+    cases = [_case("a", tier="classification"), _case("b", tier="routing")]
+    results = [_result(cases[0]), _result(cases[1], intent="concept_explain")]
+    failed = failed_cases(results, "software_engineering")
+    assert len(failed) == 1
+    assert failed[0]["id"] == "b"
+    assert failed[0]["tier"] == "routing"
+    assert any("intent mismatch" in r for r in failed[0]["reasons"])

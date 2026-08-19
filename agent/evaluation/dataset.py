@@ -9,6 +9,8 @@ from agent.config import COMPLEXITY_LEVELS
 
 OUT_OF_DOMAIN = "other"
 REJECT_STRATEGY = "reject"
+TIERS = ("classification", "routing", "full_expert")
+FULL_EXPERT = "full_expert"
 
 
 class DatasetError(Exception):
@@ -24,8 +26,11 @@ class EvalCase:
     expected_complexity: str | None
     expected_strategy: str
     expected_orchestrate: bool
-    answer_quality: bool
-    reference: str | None
+    tier: str
+    smoke: bool = False
+    reference: str | None = None
+    required_points: list[str] | None = None
+    expert_expectations: list[str] | None = None
 
 
 @dataclass
@@ -46,6 +51,14 @@ def _read_yaml(path: Path) -> object:
         return yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as e:
         raise DatasetError(f"Invalid dataset YAML: {path}: {e}")
+
+
+def _str_list(value):
+    if value is None:
+        return None
+    if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
+        raise DatasetError(f"Expected a list of strings, got: {value!r}")
+    return value
 
 
 def _validate_case(raw: object, dataset_domain: str) -> EvalCase:
@@ -88,9 +101,14 @@ def _validate_case(raw: object, dataset_domain: str) -> EvalCase:
                                f"{REJECT_STRATEGY!r}")
         if orchestrate is not False:
             raise DatasetError(f"Out-of-domain case {cid} must have orchestrate: false")
-    answer_quality = raw.get("answer_quality", True)
-    if answer_quality not in (True, False):
-        raise DatasetError(f"Case {cid} answer_quality must be a boolean")
+    tier = raw.get("tier")
+    if tier not in TIERS:
+        raise DatasetError(f"Case {cid} tier must be one of {TIERS}, got {tier!r}")
+    smoke = raw.get("smoke", False)
+    if smoke not in (True, False):
+        raise DatasetError(f"Case {cid} smoke must be a boolean")
+    if tier == FULL_EXPERT and not in_domain:
+        raise DatasetError(f"Out-of-domain case {cid} cannot be tier 'full_expert'")
     reference = raw.get("reference")
     return EvalCase(
         id=cid,
@@ -100,8 +118,11 @@ def _validate_case(raw: object, dataset_domain: str) -> EvalCase:
         expected_complexity=complexity,
         expected_strategy=strategy,
         expected_orchestrate=bool(orchestrate),
-        answer_quality=bool(answer_quality),
+        tier=tier,
+        smoke=bool(smoke),
         reference=reference if isinstance(reference, str) else None,
+        required_points=_str_list(raw.get("required_points")),
+        expert_expectations=_str_list(raw.get("expert_expectations")),
     )
 
 

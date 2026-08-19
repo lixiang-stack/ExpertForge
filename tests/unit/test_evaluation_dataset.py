@@ -20,16 +20,17 @@ domain: software_engineering
 cases:
   - id: se-001
     question: "What is dependency injection?"
+    tier: classification
     expected:
       domain: software_engineering
       intent: concept_explain
       complexity: simple
       strategy: teaching
       orchestrate: false
-    answer_quality: true
     reference: "Dependency injection passes dependencies into a component."
   - id: se-002
     question: "Recommend a restaurant in Tokyo."
+    tier: classification
     expected:
       domain: other
       intent: null
@@ -54,7 +55,8 @@ def test_load_suites_valid(tmp_path):
     assert c.expected_complexity == "simple"
     assert c.expected_strategy == "teaching"
     assert c.expected_orchestrate is False
-    assert c.answer_quality is True
+    assert c.tier == "classification"
+    assert c.smoke is False
     assert c.reference == "Dependency injection passes dependencies into a component."
 
 
@@ -70,20 +72,88 @@ def test_load_suites_out_of_domain_case_fields(tmp_path):
     assert is_in_domain(s.cases[0], s) is True
 
 
-def test_load_suites_answer_quality_defaults_true(tmp_path):
+def test_load_suites_defaults(tmp_path):
     path = _dataset_path(tmp_path,
         'cases:\n'
         '  - id: a\n'
         '    question: "q"\n'
+        '    tier: classification\n'
         '    expected:\n'
         '      domain: software_engineering\n'
         '      intent: faq\n'
         '      complexity: simple\n'
         '      strategy: direct\n')
-    s = load_suites(str(path))[0]
-    assert s.cases[0].answer_quality is True
-    assert s.cases[0].reference is None
-    assert s.cases[0].expected_orchestrate is False
+    c = load_suites(str(path))[0].cases[0]
+    assert c.smoke is False
+    assert c.reference is None
+    assert c.required_points is None
+    assert c.expert_expectations is None
+    assert c.expected_orchestrate is False
+
+
+def test_tier_required(tmp_path):
+    with pytest.raises(DatasetError):
+        load_suites(_dataset_path(tmp_path,
+            'cases:\n'
+            '  - id: a\n'
+            '    question: "q"\n'
+            '    expected:\n'
+            '      domain: software_engineering\n'
+            '      intent: faq\n'
+            '      complexity: simple\n'
+            '      strategy: direct\n'))
+
+
+def test_tier_invalid(tmp_path):
+    with pytest.raises(DatasetError):
+        load_suites(_dataset_path(tmp_path,
+            'cases:\n'
+            '  - id: a\n'
+            '    question: "q"\n'
+            '    tier: bogus\n'
+            '    expected:\n'
+            '      domain: software_engineering\n'
+            '      intent: faq\n'
+            '      complexity: simple\n'
+            '      strategy: direct\n'))
+
+
+def test_full_expert_must_be_in_domain(tmp_path):
+    with pytest.raises(DatasetError):
+        load_suites(_dataset_path(tmp_path,
+            'cases:\n'
+            '  - id: a\n'
+            '    question: "q"\n'
+            '    tier: full_expert\n'
+            '    expected:\n'
+            '      domain: other\n'
+            '      intent: null\n'
+            '      complexity: null\n'
+            '      strategy: reject\n'
+            '      orchestrate: false\n'))
+
+
+def test_smoke_and_reserved_fields_parsed(tmp_path):
+    path = _dataset_path(tmp_path,
+        'cases:\n'
+        '  - id: a\n'
+        '    question: "q"\n'
+        '    tier: full_expert\n'
+        '    smoke: true\n'
+        '    expected:\n'
+        '      domain: software_engineering\n'
+        '      intent: architecture_design\n'
+        '      complexity: complex\n'
+        '      strategy: analysis\n'
+        '    required_points:\n'
+        '      - identify bottleneck\n'
+        '    expert_expectations:\n'
+        '      - compare alternatives\n')
+    c = load_suites(str(path))[0].cases[0]
+    assert c.tier == "full_expert"
+    assert c.smoke is True
+    assert c.required_points == ["identify bottleneck"]
+    assert c.expert_expectations == ["compare alternatives"]
 
 
 def test_load_suites_missing_file():
@@ -122,13 +192,15 @@ def test_load_committed_software_engineering_suites():
     path = repo / "evaluation" / "datasets" / "software_engineering"
     suites = load_suites(str(path))
     names = [s.name for s in suites]
-    assert names == ["analysis", "classification", "code_snippet", "debugging",
-                     "direct", "orchestration", "routing", "teaching"]
+    assert "boundary" in names
+    assert {"faq", "concept_explain", "tutorial", "learning_guide", "summarization",
+            "troubleshooting", "performance_analysis", "architecture_design",
+            "comparison", "code_review", "generate_code"} <= set(names)
     assert all(s.domain == "software_engineering" for s in suites)
     all_cases = [c for s in suites for c in s.cases]
     assert len(all_cases) >= 20
     ids = [c.id for c in all_cases]
-    assert len(ids) == len(set(ids))  # no cross-suite duplication
+    assert len(ids) == len(set(ids))  # no cross-file duplication
     intents = {c.expected_intent for c in all_cases}
     assert {"faq", "concept_explain", "tutorial", "learning_guide", "summarization",
             "troubleshooting", "performance_analysis", "comparison", "architecture_design",
@@ -138,15 +210,22 @@ def test_load_committed_software_engineering_suites():
     assert {"simple", "medium", "complex"} <= {c.expected_complexity for c in all_cases}
     assert any(c.expected_orchestrate for c in all_cases)
     assert any(c.expected_domain == "other" for c in all_cases)
+    tiers = {c.id: c.tier for s in suites for c in s.cases}
+    assert set(tiers.values()) == {"classification", "routing", "full_expert"}
+    smoke = [c for s in suites for c in s.cases if c.smoke]
+    assert len(smoke) == 5
+    assert {c.tier for c in smoke} == {"classification", "routing", "full_expert"}
+    assert {c.id for c in smoke} == {"se-110", "se-120", "se-050", "se-052", "se-071"}
 
 
 def _suite_dir(tmp_path, name="software_engineering"):
     d = tmp_path / name
     d.mkdir()
-    (d / "direct.yaml").write_text(
+    (d / "faq.yaml").write_text(
         'cases:\n'
         '  - id: a\n'
         '    question: "q"\n'
+        '    tier: classification\n'
         '    expected:\n'
         '      domain: software_engineering\n'
         '      intent: faq\n'
@@ -154,10 +233,11 @@ def _suite_dir(tmp_path, name="software_engineering"):
         '      strategy: direct\n',
         encoding="utf-8",
     )
-    (d / "teaching.yaml").write_text(
+    (d / "concept_explain.yaml").write_text(
         'cases:\n'
         '  - id: b\n'
         '    question: "q2"\n'
+        '    tier: classification\n'
         '    expected:\n'
         '      domain: software_engineering\n'
         '      intent: concept_explain\n'
@@ -172,12 +252,12 @@ def test_load_suites_directory(tmp_path):
     d = _suite_dir(tmp_path)
     suites = load_suites(str(d))
     assert len(suites) == 2
-    assert suites[0].name == "direct"
-    assert suites[1].name == "teaching"
+    assert suites[0].name == "concept_explain"
+    assert suites[1].name == "faq"
     assert suites[0].domain == "software_engineering"
     assert suites[1].domain == "software_engineering"
     assert len(suites[0].cases) == 1
-    assert suites[0].cases[0].id == "a"
+    assert suites[0].cases[0].id == "b"
 
 
 def test_load_suites_empty_directory(tmp_path):
@@ -196,10 +276,10 @@ def test_load_suites_directory_missing_cases(tmp_path):
 
 def test_load_suites_single_file(tmp_path):
     d = _suite_dir(tmp_path)
-    p = d / "direct.yaml"
+    p = d / "faq.yaml"
     suites = load_suites(str(p))
     assert len(suites) == 1
-    assert suites[0].name == "direct"
+    assert suites[0].name == "faq"
     assert suites[0].domain == "software_engineering"
 
 

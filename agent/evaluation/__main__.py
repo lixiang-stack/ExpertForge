@@ -1,21 +1,21 @@
 """Evaluation CLI.
 
 Commands:
-  run          run the golden dataset (full metrics)
-    --dataset PATH           dataset dir or single YAML (default: evaluation/datasets/<domain>)
-    --suite NAME [NAME ...]  run specific suites by name
-    --max-per-suite N        cap cases per suite
-    --skip-quality           classification/routing/cost only, no answer generation
-    --label NAME             run label for the result file
-    --results-dir DIR        override the results dir (default: config evaluation.results_dir)
-    --config PATH            path to agent config.json
+  run          run the benchmark
+    --tier T [T ...]  tiers to run: classification, routing, full_expert, or all
+                      (default: the curated smoke: true cases)
+    --label NAME       run label for the result file
+    --results-dir DIR  override the results dir (default: config evaluation.results_dir)
+    --config PATH      path to agent config.json
   diff A B     compare two run results (paths printed by each run)
   baseline RUN  record a metrics-only baseline from a run result; prints delta vs existing
 
 Example:
   uv run python -m agent.evaluation run
-  uv run python -m agent.evaluation run --suite direct teaching
-  uv run python -m agent.evaluation run --label my-run --skip-quality
+  uv run python -m agent.evaluation run --tier classification
+  uv run python -m agent.evaluation run --tier classification routing
+  uv run python -m agent.evaluation run --tier full_expert
+  uv run python -m agent.evaluation run --tier all
   uv run python -m agent.evaluation diff evaluation/results/a.json evaluation/results/b.json
   uv run python -m agent.evaluation baseline evaluation/results/2026-08-15-a.json
 """
@@ -33,9 +33,9 @@ from agent.domain_config import load_domain_config
 from agent.llm import LLMClient
 from agent.loggers import get_logger, setup_logging
 
-from .dataset import DatasetError, Suite, load_suites
+from .dataset import DatasetError, Suite, TIERS, load_suites
 from .diff import diff_runs, load_result
-from .metrics import compute_metrics
+from .metrics import compute_metrics, compute_metrics_by_tier, failed_cases
 from .report import format_summary, serialize_results, slim_record, write_baseline, write_result
 from .runner import run_evaluation
 
@@ -45,9 +45,6 @@ def _default_dataset(domain_dir: str) -> str:
 
 
 def _cmd_run(args) -> int:
-    if args.max_per_suite is not None and args.max_per_suite < 1:
-        print("--max-per-suite must be >= 1", file=sys.stderr)
-        return 1
     try:
         config = load_config(args.config)
         domain = load_domain_config(config.domain_dir)
@@ -64,15 +61,25 @@ def _cmd_run(args) -> int:
     except DatasetError as e:
         print(f"Dataset error: {e}", file=sys.stderr)
         return 1
-    if args.suite:
-        wanted = set(args.suite)
-        suites = [s for s in suites if s.name in wanted]
-        if not suites:
-            print(f"No suites matched: {', '.join(args.suite)}", file=sys.stderr)
-            return 1
-    if args.max_per_suite is not None:
-        suites = [Suite(name=s.name, domain=s.domain, cases=s.cases[:args.max_per_suite])
-                  for s in suites]
+    if not suites:
+        print("No dataset suites found", file=sys.stderr)
+        return 1
+    all_cases = [c for s in suites for c in s.cases]
+    if args.tier:
+        if "all" in args.tier:
+            tiers = list(TIERS)
+        else:
+            tiers = list(dict.fromkeys(args.tier))
+        selected = [c for c in all_cases if c.tier in tiers]
+        smoke_only = False
+    else:
+        selected = [c for c in all_cases if c.smoke]
+        tiers = sorted({c.tier for c in selected}, key=TIERS.index)
+        smoke_only = True
+    if not selected:
+        print("No cases match the selection", file=sys.stderr)
+        return 1
+    pool = Suite(name="pool", domain=suites[0].domain, cases=selected)
     client = LLMClient(base_url=config.base_url, api_key=api_key, model=config.model,
                        timeout=config.timeout,
                        provider=config.provider,
@@ -97,27 +104,19 @@ def _cmd_run(args) -> int:
         except ConfigError as e:
             print(f"Config error: {e}", file=sys.stderr)
             return 1
-    results_by_suite: dict[str, list] = {}
-    for s in suites:
-        logger.info("eval run start", domain=domain.name, suite=s.name)
-        results_by_suite[s.name] = run_evaluation(
-            config, domain, s, client, judge_client=judge_client, skip_quality=args.skip_quality
-        )
-        logger.info("eval run end", domain=domain.name, suite=s.name,
-                    cases=len(results_by_suite[s.name]))
-    metrics_by_suite = {
-        s.name: compute_metrics(s, results_by_suite[s.name]) for s in suites
-    }
-    all_results = [r for rs in results_by_suite.values() for r in rs]
-    all_cases = [c for s in suites for c in s.cases]
-    merged = Suite(name="all", domain=suites[0].domain, cases=all_cases)
-    metrics = compute_metrics(merged, all_results)
+    logger.info("eval run start", domain=domain.name, tiers=tiers, smoke_only=smoke_only,
+                cases=len(selected))
+    results = run_evaluation(config, domain, pool, client, judge_client=judge_client)
+    logger.info("eval run end", domain=domain.name, cases=len(results))
+    metrics = compute_metrics(pool, results)
+    metrics_by_tier = compute_metrics_by_tier(pool.cases, results, domain=pool.domain)
+    failed = failed_cases(results, pool.domain)
     judge_name = resolve_judge_model(config)
     record = serialize_results(
-        all_results, metrics, metrics_by_suite,
-        domain=merged.domain, label=args.label, model=config.model,
-        judge_model=judge_name, skip_quality=args.skip_quality,
-        dataset_path=dataset_path, suites=[s.name for s in suites],
+        results, metrics, metrics_by_tier,
+        domain=pool.domain, label=args.label, model=config.model,
+        judge_model=judge_name, tiers=tiers, smoke_only=smoke_only,
+        dataset_path=dataset_path, failed_cases=failed,
     )
     results_dir = args.results_dir
     if results_dir is None:
@@ -166,20 +165,19 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="agent.evaluation")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    run_p = sub.add_parser("run", help="run the golden dataset")
+    run_p = sub.add_parser("run", help="run the benchmark")
     run_p.add_argument("--dataset", default=None,
                        help="path to dataset directory (or single YAML file)")
     run_p.add_argument("--label", default="run", help="run label for the result file")
-    run_p.add_argument("--skip-quality", action="store_true",
-                       help="classification/routing/cost only, no answer generation")
     run_p.add_argument("--config", default=None, help="path to agent config.json")
     run_p.add_argument("--results-dir", default=None,
                        help="directory for result JSONs (default: config evaluation.results_dir, "
                             "else evaluation/results)")
-    run_p.add_argument("--suite", nargs="+", default=None,
-                       help="suites to run by name (default: all suites)")
-    run_p.add_argument("--max-per-suite", type=int, default=None,
-                       help="cap cases per suite (default: unlimited)")
+    run_p.add_argument("--tier", nargs="+",
+                       choices=("classification", "routing", "full_expert", "all"),
+                       default=None,
+                       help="tiers to run; if 'all' is present all tiers run "
+                            "(default: smoke cases)")
     run_p.set_defaults(func=_cmd_run)
 
     diff_p = sub.add_parser("diff", help="compare two run results")
