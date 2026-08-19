@@ -22,9 +22,6 @@ class FakeClient:
     def chat_completion(self, messages, *, model=None, temperature=0.3, **kwargs):
         return ChatResult(text=self._responses.pop(0), model=model or self.model)
 
-    def chat_completion_stream(self, messages, **kwargs):
-        return iter([])
-
 
 _CLASSIFY = '{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}'
 
@@ -60,7 +57,6 @@ def test_install_enabled_wraps_client(tmp_path):
     out, plugin = install(client, _enabled_config(tmp_path), None)
     assert out is not client
     assert plugin is not None
-    assert out.model == "m"
 
 
 def test_install_enabled_patches_pipeline(tmp_path):

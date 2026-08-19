@@ -1,5 +1,3 @@
-import pytest
-
 from agent.observability.report_data import (
     ModelStat,
     TraceSummary,
@@ -90,9 +88,6 @@ def test_summary_as_dict():
 def test_model_stat_is_dataclass():
     assert isinstance(model_stats(_events())[0], ModelStat)
     assert isinstance(summarize_traces(_events())[0], TraceSummary)
-
-
-from agent.observability.report_data import Step, build_timeline
 
 
 def _decision_events():

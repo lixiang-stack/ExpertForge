@@ -9,3 +9,4 @@ config.json
 .observability/
 evaluation/results/*
 !evaluation/results/baseline.json
+logs/

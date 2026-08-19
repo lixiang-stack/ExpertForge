@@ -1,7 +1,5 @@
 import json
 
-import pytest
-
 from agent.evaluation import __main__ as eval_main
 from agent.llm import ChatResult
 
@@ -60,9 +58,6 @@ def test_main_run_prints_summary_and_writes_file(tmp_path, monkeypatch):
                 text='{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}',
                 model=model or "m",
             )
-
-        def chat_completion_stream(self, messages, **kwargs):
-            return iter([])
 
     monkeypatch.setattr(eval_main, "LLMClient", FakeClient)
     monkeypatch.setenv("AGENT_API_KEY", "k")
@@ -162,9 +157,6 @@ def _run_with_fake(monkeypatch, argv):
                 text='{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}',
                 model=model or "m",
             )
-
-        def chat_completion_stream(self, messages, **kwargs):
-            return iter([])
 
     monkeypatch.setattr(eval_main, "LLMClient", FakeClient)
     import io
@@ -267,9 +259,6 @@ def test_main_passes_provider_and_capability_overrides_from_config(tmp_path, mon
                 model=model or "m",
             )
 
-        def chat_completion_stream(self, messages, **kwargs):
-            return iter([])
-
     monkeypatch.setattr(eval_main, "LLMClient", FakeClient)
     import io
     import sys
@@ -283,6 +272,139 @@ def test_main_passes_provider_and_capability_overrides_from_config(tmp_path, mon
     assert rc == 0
     assert captured["provider"] == "gemini"
     assert captured["capability_overrides"] == {"supports_json_schema": True}
+
+
+def test_main_judge_client_gets_capabilities_from_judge_config(tmp_path, monkeypatch):
+    config_path, suite_dir = _suite_cli_env(tmp_path)
+    with open(config_path, encoding="utf-8") as f:
+        data = json.load(f)
+    data["evaluation"] = {
+        "judge": {
+            "base_url": "https://j",
+            "model": "judge-a",
+            "provider": "judge-prov",
+            "provider_capabilities": {"supports_thinking_toggle": True,
+                                      "supports_json_schema": True},
+        }
+    }
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    monkeypatch.setenv("AGENT_JUDGE_API_KEY", "judge-env")
+
+    captured = []
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            captured.append(kwargs)
+
+        def chat_completion(self, messages, model=None, temperature=0.3,
+                            disable_thinking=False, json_mode=False, json_schema=None):
+            return ChatResult(
+                text='{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}',
+                model=model or "m",
+            )
+
+    monkeypatch.setattr(eval_main, "LLMClient", FakeClient)
+    import io
+    import sys
+
+    out = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", out)
+    rc = eval_main.main([
+        "run", "--config", str(config_path), "--dataset", str(suite_dir),
+        "--label", "jc", "--results-dir", str(tmp_path / "r"), "--skip-quality",
+    ])
+    assert rc == 0
+    assert len(captured) == 2  # main client + judge client
+    main_client, judge_client = captured
+    assert main_client["provider"] == "test"
+    assert judge_client["base_url"] == "https://j"
+    assert judge_client["model"] == "judge-a"
+    assert judge_client["provider"] == "judge-prov"
+    assert judge_client["api_key"] == "judge-env"
+    assert judge_client["capability_overrides"] == {
+        "supports_json_schema": True,
+        "supports_thinking_toggle": True,
+        "supports_tool_call": False,
+    }
+
+
+def test_main_judge_client_capabilities_fall_back_to_top_level(tmp_path, monkeypatch):
+    config_path, suite_dir = _suite_cli_env(tmp_path)
+    with open(config_path, encoding="utf-8") as f:
+        data = json.load(f)
+    data["provider_capabilities"] = {"supports_thinking_toggle": True}
+    data["evaluation"] = {"judge": {"base_url": "https://j", "model": "judge-a"}}
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    monkeypatch.setenv("AGENT_JUDGE_API_KEY", "judge-env")
+
+    captured = []
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            captured.append(kwargs)
+
+        def chat_completion(self, messages, model=None, temperature=0.3,
+                            disable_thinking=False, json_mode=False, json_schema=None):
+            return ChatResult(
+                text='{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}',
+                model=model or "m",
+            )
+
+    monkeypatch.setattr(eval_main, "LLMClient", FakeClient)
+    import io
+    import sys
+
+    out = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", out)
+    rc = eval_main.main([
+        "run", "--config", str(config_path), "--dataset", str(suite_dir),
+        "--label", "jc", "--results-dir", str(tmp_path / "r"), "--skip-quality",
+    ])
+    assert rc == 0
+    assert len(captured) == 2
+    main_client, judge_client = captured
+    assert main_client["provider"] == "test"
+    assert main_client["api_key"] == "k"
+    assert judge_client["model"] == "judge-a"
+    assert judge_client["provider"] == "test"  # judge provider falls back too
+    assert judge_client["api_key"] == "judge-env"  # own key, not the main client's
+    assert judge_client["capability_overrides"] == {"supports_thinking_toggle": True}
+
+
+def test_main_judge_client_missing_key_returns_1(tmp_path, monkeypatch, capsys):
+    config_path, suite_dir = _suite_cli_env(tmp_path)
+    with open(config_path, encoding="utf-8") as f:
+        data = json.load(f)
+    data["evaluation"] = {"judge": {"base_url": "https://j", "model": "judge-a"}}
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    monkeypatch.delenv("AGENT_JUDGE_API_KEY", raising=False)
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def chat_completion(self, messages, model=None, temperature=0.3,
+                            disable_thinking=False, json_mode=False, json_schema=None):
+            return ChatResult(
+                text='{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}',
+                model=model or "m",
+            )
+
+    monkeypatch.setattr(eval_main, "LLMClient", FakeClient)
+    rc = eval_main.main([
+        "run", "--config", str(config_path), "--dataset", str(suite_dir),
+        "--label", "jc", "--results-dir", str(tmp_path / "r"), "--skip-quality",
+    ])
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "Config error:" in err
+    assert "AGENT_JUDGE_API_KEY" in err
 
 
 def _result_record(domain_accuracy):

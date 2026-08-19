@@ -1,3 +1,15 @@
+"""Observability report CLI.
+
+Commands:
+  report              generate a self-contained HTML report from trace JSONL
+    --data-dir DIR    trace JSONL directory (default: .observability)
+    --day YYYY-MM-DD  filter to a single day
+
+Example:
+  uv run python -m agent.observability report
+  uv run python -m agent.observability report --day 2026-08-11
+"""
+
 from __future__ import annotations
 
 import argparse

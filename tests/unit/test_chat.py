@@ -88,7 +88,7 @@ def test_respond_uses_complexity_routed_model():
                 _domain())
     resp = chat.respond("what is defer")
     assert resp.kind == "answer"
-    # first call: classification (model=cm); second call: generator (model=low)
+    # first call: classification (model=cm); second call: strategy (model=low)
     assert client.models == ["cm", "low-a"]
 
 

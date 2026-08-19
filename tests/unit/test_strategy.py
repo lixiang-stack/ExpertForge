@@ -1,4 +1,4 @@
-from agent.config import DomainConfig, IntentDef
+from agent.config import DomainConfig
 from agent.llm import ChatResult
 from agent.strategy import Strategy, build_registry
 

@@ -3,11 +3,8 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass, field
-from pathlib import Path
 
-import yaml
-
-from .capabilities import KNOWN_CAPABILITY_KEYS
+from .capabilities import KNOWN_CAPABILITY_KEYS, ProviderCapabilities
 
 
 class ConfigError(Exception):
@@ -18,6 +15,7 @@ DEFAULT_CONFIG_PATH = "config.json"
 DEFAULT_EXAMPLE_CONFIG_PATH = "config.example.json"
 
 COMPLEXITY_LEVELS = ("simple", "medium", "complex")
+LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
 
 @dataclass
@@ -28,9 +26,25 @@ class ObservabilityConfig:
 
 
 @dataclass
+class JudgeConfig:
+    base_url: str
+    model: str
+    provider: str
+    provider_capabilities: ProviderCapabilities | None = None
+    timeout: int = 60
+
+
+@dataclass
 class EvaluationConfig:
-    judge_model: str | None = None
     results_dir: str = "evaluation/results"
+    judge: JudgeConfig | None = None
+
+
+@dataclass
+class LoggingConfig:
+    enabled: bool = False
+    level: str = "INFO"
+    file: str = "logs/agent.jsonl"
 
 
 @dataclass
@@ -46,6 +60,13 @@ class AgentConfig:
     provider_capabilities: dict[str, bool] = field(default_factory=dict)
     observability: ObservabilityConfig | None = None
     evaluation: EvaluationConfig | None = None
+    logging: LoggingConfig | None = None
+
+
+def resolve_judge_model(config: AgentConfig) -> str:
+    """Return the judge model, falling back to the main model when no judge is configured."""
+    judge = config.evaluation.judge if config.evaluation is not None else None
+    return judge.model if judge is not None else config.model
 
 
 def _read_json_file(path: str) -> dict:
@@ -72,6 +93,18 @@ def _load_config_dict(path: str | None, default_path: str) -> dict:
         f"Config file not found: {default_path}. "
         "Create one by copying config.example.json."
     )
+
+
+def _validate_capabilities(caps: dict, section: str) -> None:
+    """Validate capability keys and value types for a config section."""
+    for key, value in caps.items():
+        if key not in KNOWN_CAPABILITY_KEYS:
+            raise ConfigError(
+                f"Unknown capability '{key}' in {section}. "
+                f"Known capabilities: {', '.join(KNOWN_CAPABILITY_KEYS)}."
+            )
+        if not isinstance(value, bool):
+            raise ConfigError(f"Capability '{key}' must be a boolean in {section}.")
 
 
 def load_config(path: str | None = None) -> AgentConfig:
@@ -111,17 +144,6 @@ def load_config(path: str | None = None) -> AgentConfig:
             phase_map=phase_map if isinstance(phase_map, dict) else {},
         )
 
-    raw_eval = raw.get("evaluation")
-    evaluation = None
-    if isinstance(raw_eval, dict):
-        judge_model = raw_eval.get("judge_model")
-        judge_model = judge_model if isinstance(judge_model, str) and judge_model else None
-        results_dir = raw_eval.get("results_dir") or "evaluation/results"
-        evaluation = EvaluationConfig(
-            judge_model=judge_model,
-            results_dir=results_dir if isinstance(results_dir, str) else "evaluation/results",
-        )
-
     provider = raw.get("provider")
     if not isinstance(provider, str) or not provider:
         raise ConfigError("Missing 'provider' in config (e.g. 'deepseek' or 'gemini').")
@@ -131,15 +153,60 @@ def load_config(path: str | None = None) -> AgentConfig:
         raise ConfigError(
             "Missing 'provider_capabilities' in config; declare the provider's capabilities."
         )
-    for key, value in raw_caps.items():
-        if key not in KNOWN_CAPABILITY_KEYS:
-            raise ConfigError(
-                f"Unknown capability '{key}' in provider_capabilities. "
-                f"Known capabilities: {', '.join(KNOWN_CAPABILITY_KEYS)}."
-            )
-        if not isinstance(value, bool):
-            raise ConfigError(f"Capability '{key}' must be a boolean in provider_capabilities.")
+    _validate_capabilities(raw_caps, "provider_capabilities")
     provider_capabilities = dict(raw_caps)
+
+    eval_block = raw.get("evaluation")
+    if not isinstance(eval_block, dict):
+        eval_block = {}
+    eval_results_dir = eval_block.get("results_dir")
+    if not isinstance(eval_results_dir, str):
+        eval_results_dir = "evaluation/results"
+
+    judge_block = eval_block.get("judge")
+    if not isinstance(judge_block, dict):
+        judge_block = {}
+    judge_base_url = judge_block.get("base_url") or base_url
+    judge_name = judge_block.get("model") or model
+    judge_provider = judge_block.get("provider") or provider
+    judge_caps = judge_block.get("provider_capabilities")
+    if isinstance(judge_caps, dict):
+        _validate_capabilities(judge_caps, "evaluation.judge.provider_capabilities")
+    judge_caps_obj = (
+        ProviderCapabilities(provider=judge_provider, **judge_caps)
+        if isinstance(judge_caps, dict)
+        else None
+    )
+    judge_timeout = judge_block.get("timeout", 60)
+    judge_timeout = (
+        judge_timeout if isinstance(judge_timeout, (int, float)) and judge_timeout > 0 else 60
+    )
+    judge_config = (
+        JudgeConfig(
+            base_url=judge_base_url,
+            model=judge_name,
+            provider=judge_provider,
+            provider_capabilities=judge_caps_obj,
+            timeout=judge_timeout,
+        )
+        if judge_block
+        else None
+    )
+
+    evaluation = EvaluationConfig(results_dir=eval_results_dir, judge=judge_config)
+
+    logging_block = raw.get("logging")
+    if not isinstance(logging_block, dict):
+        logging_block = {}
+    logging_level = logging_block.get("level", "INFO")
+    if logging_level not in LOG_LEVELS:
+        raise ConfigError(f"Unknown log level '{logging_level}'. Valid: {', '.join(LOG_LEVELS)}")
+    logging_enabled = logging_block.get("enabled", False)
+    logging_config = LoggingConfig(
+        enabled=logging_enabled if isinstance(logging_enabled, bool) else False,
+        level=logging_level,
+        file=logging_block.get("file", "logs/agent.jsonl"),
+    )
 
     return AgentConfig(
         base_url=base_url,
@@ -153,6 +220,7 @@ def load_config(path: str | None = None) -> AgentConfig:
         provider_capabilities=provider_capabilities,
         observability=observability,
         evaluation=evaluation,
+        logging=logging_config,
     )
 
 
@@ -162,6 +230,16 @@ def get_api_key() -> str:
         raise ConfigError(
             "AGENT_API_KEY environment variable is not set. "
             "Set it with: export AGENT_API_KEY=your_key"
+        )
+    return api_key
+
+
+def get_judge_api_key() -> str:
+    api_key = os.environ.get("AGENT_JUDGE_API_KEY")
+    if not api_key:
+        raise ConfigError(
+            "AGENT_JUDGE_API_KEY environment variable is not set. "
+            "Set it with: export AGENT_JUDGE_API_KEY=your_key"
         )
     return api_key
 
@@ -218,196 +296,3 @@ class DomainConfig:
     complexity: ComplexityPolicy | None = None
     expert_policy: str = ""
     orchestration: OrchestrationPolicy | None = None
-
-
-def _read_json(path: Path) -> dict:
-    if not path.is_file():
-        raise ConfigError(f"Domain config file not found: {path}")
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-    except json.JSONDecodeError as e:
-        raise ConfigError(f"Invalid domain config JSON: {path}: {e}")
-    if not isinstance(data, dict):
-        raise ConfigError(f"Domain config must be a JSON object: {path}")
-    return data
-
-
-def _read_yaml(path: Path) -> object:
-    if not path.is_file():
-        raise ConfigError(f"Domain config file not found: {path}")
-    try:
-        with open(path, encoding="utf-8") as f:
-            return yaml.safe_load(f)
-    except yaml.YAMLError as e:
-        raise ConfigError(f"Invalid domain config YAML: {path}: {e}")
-
-
-def _str_list(value: object) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    return [v for v in value if isinstance(v, str)]
-
-
-def _read_prompt(path: Path) -> str:
-    if not path.is_file():
-        raise ConfigError(f"Prompt file not found: {path}")
-    return path.read_text(encoding="utf-8")
-
-
-def load_domain_config(domain_dir: str) -> DomainConfig:
-    base = Path(domain_dir)
-    meta = _read_json(base / "domain.json")
-    name = meta.get("name") or ""
-    description = meta.get("description")
-    if not description:
-        raise ConfigError(f"Missing 'description' in {base / 'domain.json'}")
-    out_of_domain_reply = meta.get("out_of_domain_reply") or (
-        f"This question falls outside my expert domain ({name}) "
-        "and I cannot provide a professional answer."
-    )
-
-    intents: dict[str, IntentDef] = {}
-    intents_data = _read_yaml(base / "intents.yaml")
-    if intents_data is None:
-        intents_data = []
-    if not isinstance(intents_data, list):
-        raise ConfigError(f"intents.yaml must contain a list: {base / 'intents.yaml'}")
-    for item in intents_data:
-        if not isinstance(item, dict) or not isinstance(item.get("id"), str):
-            raise ConfigError(f"Invalid intent entry in {base / 'intents.yaml'}: {item}")
-        iid = item["id"]
-        intents[iid] = IntentDef(
-            id=iid,
-            description=item.get("description") or "",
-            positive_examples=_str_list(item.get("positive_examples")),
-            negative_examples=_str_list(item.get("negative_examples")),
-            boundaries=_str_list(item.get("boundaries")),
-        )
-
-    orchestration = None
-    orch_path = base / "orchestration.yaml"
-    if not orch_path.is_file():
-        raise ConfigError(f"orchestration.yaml not found: {orch_path}")
-    orch_data = _read_yaml(orch_path)
-    if not isinstance(orch_data, dict):
-        raise ConfigError(f"orchestration.yaml must contain a mapping: {orch_path}")
-    orch_intents = orch_data.get("intents")
-    if not isinstance(orch_intents, list) or not orch_intents:
-        raise ConfigError(f"orchestration.yaml 'intents' must be a non-empty list: {orch_path}")
-    if not all(isinstance(i, str) and i in intents for i in orch_intents):
-        raise ConfigError(f"orchestration.yaml 'intents' references unknown intent: {orch_path}")
-    min_complexity = orch_data.get("min_complexity", "complex")
-    if min_complexity not in COMPLEXITY_LEVELS:
-        raise ConfigError(f"Unknown 'min_complexity' {min_complexity!r} in {orch_path}")
-    max_workers = orch_data.get("max_workers", 4)
-    if not isinstance(max_workers, int) or max_workers <= 0:
-        raise ConfigError(f"orchestration.yaml 'max_workers' must be a positive int: {orch_path}")
-    ev = orch_data.get("evaluator") or {}
-    if not isinstance(ev, dict):
-        raise ConfigError(f"orchestration.yaml 'evaluator' must be a mapping: {orch_path}")
-    min_score = ev.get("min_dimension_score", 3)
-    max_rounds = ev.get("max_rounds", 1)
-    if not isinstance(min_score, int) or not 1 <= min_score <= 5:
-        raise ConfigError(f"orchestration.yaml 'min_dimension_score' must be an int in 1..5: {orch_path}")
-    if not isinstance(max_rounds, int) or max_rounds < 0:
-        raise ConfigError(f"orchestration.yaml 'max_rounds' must be a non-negative int: {orch_path}")
-    orchestration = OrchestrationPolicy(
-        enabled=bool(orch_data.get("enabled", True)),
-        min_complexity=min_complexity,
-        intents=orch_intents,
-        max_workers=max_workers,
-        evaluator=EvaluatorPolicy(
-            enabled=bool(ev.get("enabled", True)),
-            min_dimension_score=min_score,
-            max_rounds=max_rounds,
-        ),
-    )
-
-    complexity = None
-    complexity_path = base / "complexity.yaml"
-    if complexity_path.is_file():
-        complexity_data = _read_yaml(complexity_path)
-        if not isinstance(complexity_data, list):
-            raise ConfigError(
-                f"complexity.yaml must contain a list: {complexity_path}"
-            )
-        levels: list[ComplexityLevelDef] = []
-        for item in complexity_data:
-            if not isinstance(item, dict) or not isinstance(item.get("level"), str):
-                raise ConfigError(
-                    f"Invalid complexity level entry in {complexity_path}: {item}"
-                )
-            if item["level"] not in COMPLEXITY_LEVELS:
-                raise ConfigError(
-                    f"Unknown complexity level {item['level']!r} in {complexity_path}"
-                )
-            levels.append(ComplexityLevelDef(
-                level=item["level"],
-                description=item.get("description") or "",
-                dimensions=_str_list(item.get("dimensions")),
-                positive_examples=_str_list(item.get("positive_examples")),
-                negative_examples=_str_list(item.get("negative_examples")),
-                boundaries=_str_list(item.get("boundaries")),
-            ))
-        if [l.level for l in levels] != list(COMPLEXITY_LEVELS):
-            raise ConfigError(
-                f"complexity.yaml must define each level exactly once in order "
-                f"simple, medium, complex: {complexity_path}"
-            )
-        complexity = ComplexityPolicy(levels=levels)
-
-    mapping_data = _read_yaml(base / "intent_mapping.yaml")
-    if mapping_data is None:
-        mapping_data = {}
-    if not isinstance(mapping_data, dict):
-        raise ConfigError(
-            f"intent_mapping.yaml must contain a mapping: {base / 'intent_mapping.yaml'}"
-        )
-    intent_mapping: dict[str, str] = {}
-    for intent_id, strategy_id in mapping_data.items():
-        if not isinstance(strategy_id, str):
-            raise ConfigError(f"Invalid mapping for intent '{intent_id}'")
-        if intent_id not in intents:
-            raise ConfigError(
-                f"Mapping references unknown intent '{intent_id}' in {base / 'intent_mapping.yaml'}"
-            )
-        intent_mapping[intent_id] = strategy_id
-
-    for intent_id in intents:
-        if intent_id not in intent_mapping:
-            raise ConfigError(
-                f"intent_mapping.yaml is missing a strategy for intent '{intent_id}'"
-            )
-
-    prompt_dir = base / "prompts"
-    strategies = sorted(p.stem for p in prompt_dir.glob("*.md"))
-    if not strategies:
-        raise ConfigError(f"No strategy prompt files found in {prompt_dir}")
-    prompts: dict[str, str] = {}
-    for sid in strategies:
-        prompts[sid] = _read_prompt(prompt_dir / f"{sid}.md")
-    for intent_id, strategy_id in intent_mapping.items():
-        if strategy_id not in strategies:
-            raise ConfigError(
-                f"Mapping for intent '{intent_id}' references unknown strategy "
-                f"'{strategy_id}': no {strategy_id}.md in {prompt_dir}"
-            )
-
-    expert_policy = ""
-    expert_policy_path = base / "expert_policy.md"
-    if expert_policy_path.is_file():
-        expert_policy = expert_policy_path.read_text(encoding="utf-8")
-
-    return DomainConfig(
-        name=name,
-        description=description,
-        out_of_domain_reply=out_of_domain_reply,
-        intents=intents,
-        intent_mapping=intent_mapping,
-        strategies=strategies,
-        prompts=prompts,
-        complexity=complexity,
-        expert_policy=expert_policy,
-        orchestration=orchestration,
-    )

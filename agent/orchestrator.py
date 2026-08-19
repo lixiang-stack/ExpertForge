@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from .config import AgentConfig, DomainConfig
+from .config import AgentConfig, DomainConfig, resolve_judge_model
 from .evaluation.judge import Judge
 from .llm import LLMClient, LLMError
+from .loggers import get_logger
 from .parsing import parse_json
 from .strategy import build_registry
 from .router import RouteResult
 from .worker_pool import WorkerResult, WorkerTask, run_workers
+
+logger = get_logger("orchestrator")
 
 
 def _planner_schema() -> dict:
@@ -80,6 +83,7 @@ class Orchestrator:
         return proc.build_system_prompt()
 
     def run(self, question: str, route: RouteResult, model: str) -> str:
+        logger.info("orchestration start", strategy=route.strategy, model=model)
         context = self._strategy_context(route.strategy)
         tasks = self._plan(question, route.strategy, context, model)
         if tasks is None:
@@ -90,6 +94,11 @@ class Orchestrator:
             lambda task: self._worker(question, task, context, model),
             max_workers=policy.max_workers if policy else 4,
         )
+        for r in results:
+            if r.error:
+                logger.warning(
+                    "worker failure", task=r.task.title, role=r.task.role, error=r.error
+                )
         if all(r.error for r in results):
             return self._direct_answer(question, route.strategy, context, model)
         answer = self._aggregate(question, route.strategy, context, results, model)
@@ -99,15 +108,14 @@ class Orchestrator:
             question, route.strategy, context, results, answer, model, policy.evaluator
         )
 
-    def _judge_model(self) -> str:
-        cfg = self.config.evaluation
-        return (cfg.judge_model if cfg and cfg.judge_model else None) or self.config.model
+    def _judge_name(self) -> str:
+        return resolve_judge_model(self.config)
 
     def _evaluate_loop(
         self, question: str, strategy: str, context: str,
         results: list[WorkerResult], answer: str, model: str, evaluator,
     ) -> str:
-        judge = Judge(self.client, self._judge_model())
+        judge = Judge(self.client, self._judge_name())
         threshold = evaluator.min_dimension_score
         for round_no in range(evaluator.max_rounds + 1):
             scorecard = self._evaluate(judge, question, answer)

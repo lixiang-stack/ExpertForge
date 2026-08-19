@@ -1,10 +1,7 @@
 import pytest
 
 from agent.evaluation.dataset import (
-    COMPLEXITY_LEVELS,
     DatasetError,
-    EvalCase,
-    Suite,
     is_in_domain,
     load_suites,
 )

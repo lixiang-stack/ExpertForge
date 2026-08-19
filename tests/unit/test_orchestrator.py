@@ -1,4 +1,4 @@
-from agent.config import AgentConfig, DomainConfig, EvaluationConfig, EvaluatorPolicy, IntentDef, OrchestrationPolicy
+from agent.config import AgentConfig, DomainConfig, EvaluationConfig, EvaluatorPolicy, IntentDef, JudgeConfig, OrchestrationPolicy
 from agent.llm import ChatResult, LLMError
 from agent.orchestrator import Orchestrator
 from agent.router import RouteResult
@@ -297,9 +297,10 @@ def test_run_reaggregate_llm_error_returns_previous():
     assert result == "draft answer"
 
 
-def test_run_judge_uses_judge_model_from_config():
+def test_run_judge_uses_judge_name_from_config():
     config = _config()
-    config.evaluation = EvaluationConfig(judge_model="judge-a")
+    config.evaluation = EvaluationConfig(
+        judge=JudgeConfig(base_url="https://j", model="judge-a", provider="p"))
     client = FakeClient([_PLAN_JSON, "w1", "w2", "final answer", _SCORECARD_PASS])
     Orchestrator(client, config, _domain()).run("huge task", _route(), "high-a")
     judge_call = client.calls[4]

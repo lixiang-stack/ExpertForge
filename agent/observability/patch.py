@@ -72,7 +72,6 @@ def _current_inst() -> "Installed | None":
 class Installed:
     store: TraceStore
     phase_map: dict[str, str] = field(default_factory=dict)
-    patched: list[str] = field(default_factory=list)
     _worker_counters: dict = field(default_factory=dict)
     _worker_lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -112,7 +111,6 @@ class Installed:
             wrapper = factories[key](original, key)
             setattr(target, patch_name, functools.wraps(original)(wrapper))
             wrapper.__setattr__(_PATCH_MARKER, key)
-            self.patched.append(key)
         except Exception as e:  # noqa: BLE001 - degrade, never block business
             warnings.warn(f"observability: failed to patch {key}: {e}")
 
@@ -245,7 +243,7 @@ class Installed:
                     policy = orch.domain.orchestration
                     inst._record_decision(tid, inst._phase(key), {
                         "evaluated": bool(policy and policy.evaluator.enabled),
-                        "evaluator_model": orch._judge_model()})
+                        "evaluator_model": orch._judge_name()})
                 return answer
         return wrapper
 
