@@ -2,7 +2,7 @@ import contextvars
 import threading
 import time
 
-from agent.worker_pool import WorkerResult, WorkerTask, run_workers
+from agent.worker_pool import WorkerTask, run_workers
 
 
 def _tasks(n=4):

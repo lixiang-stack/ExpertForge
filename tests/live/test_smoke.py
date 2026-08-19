@@ -5,7 +5,7 @@ provide the key through the environment (or your secret manager / CI secret) —
 never hardcode or commit it:
 
     export AGENT_API_KEY=your_key
-    uv run pytest live -v
+    uv run pytest tests/live -v
 """
 
 import json
@@ -17,7 +17,7 @@ import pytest
 from agent import agent_cli
 from tests.helpers import absolutize_domain_dir, resolve_live_config_src
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("AGENT_API_KEY") is None,

@@ -33,9 +33,6 @@ class FakeInner:
         self.seen_phases.append(current_phase())
         return ChatResult(text=self._responses.pop(0), model=model or "m")
 
-    def chat_completion_stream(self, messages, **kwargs):
-        return iter([])
-
 
 class RaisingInner(FakeInner):
     def __init__(self, responses, raise_on_call):

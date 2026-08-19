@@ -1,4 +1,4 @@
-from agent.config import AgentConfig, DomainConfig, IntentDef
+from agent.config import AgentConfig
 from agent.model_router import resolve_model
 from agent.router import RouteResult
 
@@ -10,18 +10,6 @@ def _config(model_low=None, model_high=None):
     )
 
 
-def _domain():
-    return DomainConfig(
-        name="sw",
-        description="d",
-        out_of_domain_reply="Out.",
-        intents={"faq": IntentDef("faq", "quick")},
-        intent_mapping={"faq": "direct"},
-        strategies=["direct", "teaching"],
-        prompts={},
-    )
-
-
 def _route(strategy="direct", complexity=None):
     return RouteResult(
         in_domain=True, strategy=strategy,
@@ -30,31 +18,30 @@ def _route(strategy="direct", complexity=None):
 
 
 def test_simple_uses_model_low():
-    domain = _domain()
-    result = resolve_model(_config("low-a", "high-a"), domain, _route(complexity="simple"), "default")
+    result = resolve_model(_config("low-a", "high-a"), _route(complexity="simple"), "default")
     assert result == "low-a"
 
 
 def test_simple_missing_model_low_falls_back_to_default():
-    result = resolve_model(_config(), _domain(), _route(complexity="simple"), "default")
+    result = resolve_model(_config(), _route(complexity="simple"), "default")
     assert result == "default"
 
 
 def test_medium_uses_model_high():
-    result = resolve_model(_config("low-a", "high-a"), _domain(), _route(complexity="medium"), "default")
+    result = resolve_model(_config("low-a", "high-a"), _route(complexity="medium"), "default")
     assert result == "high-a"
 
 
 def test_complex_uses_model_high():
-    result = resolve_model(_config("low-a", "high-a"), _domain(), _route(complexity="complex"), "default")
+    result = resolve_model(_config("low-a", "high-a"), _route(complexity="complex"), "default")
     assert result == "high-a"
 
 
 def test_none_complexity_uses_model_high():
-    result = resolve_model(_config("low-a", "high-a"), _domain(), _route(complexity=None), "default")
+    result = resolve_model(_config("low-a", "high-a"), _route(complexity=None), "default")
     assert result == "high-a"
 
 
 def test_medium_missing_model_high_falls_back_to_default():
-    result = resolve_model(_config("low-a", None), _domain(), _route(complexity="medium"), "default")
+    result = resolve_model(_config("low-a", None), _route(complexity="medium"), "default")
     assert result == "default"

@@ -1,7 +1,8 @@
 import json
 
 from agent.chat import Chat
-from agent.config import AgentConfig, load_domain_config
+from agent.config import AgentConfig
+from agent.domain_config import load_domain_config
 from agent.llm import ChatResult
 
 

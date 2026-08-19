@@ -7,7 +7,7 @@ These skip automatically when `AGENT_API_KEY` is not set. Provide the key via
 the environment / secret manager / CI secret — never hardcode or commit it:
 
     export AGENT_API_KEY=your_key
-    uv run pytest live -v
+    uv run pytest tests/live -v
 """
 
 import json
@@ -17,11 +17,12 @@ from pathlib import Path
 import pytest
 
 from agent.chat import Chat
-from agent.config import load_config, load_domain_config
+from agent.config import load_config
+from agent.domain_config import load_domain_config
 from agent.llm import LLMClient
 from tests.helpers import absolutize_domain_dir, resolve_live_config_src
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("AGENT_API_KEY") is None,
@@ -57,7 +58,7 @@ def test_integration_complex_question_orchestrates(live_chat):
     assert response.text.strip(), "expected a non-empty response"
 
 
-def test_integration_medium_question_uses_processor(live_chat):
+def test_integration_medium_question_uses_strategy(live_chat):
     """A medium question should return a non-empty answer through the strategy path."""
     response = live_chat.respond(
         "Explain how Go's context package is designed and why."

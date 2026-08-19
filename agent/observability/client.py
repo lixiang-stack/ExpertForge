@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import time
 import warnings
-from typing import Iterator
 
 from agent.llm import ChatResult, LLMError
 
@@ -15,10 +14,6 @@ class TracedLLMClient:
     def __init__(self, inner, store: TraceStore):
         self._inner = inner
         self._store = store
-
-    @property
-    def model(self) -> str:
-        return self._inner.model
 
     def _base_event(self) -> dict:
         return {
@@ -56,9 +51,3 @@ class TracedLLMClient:
                    "status": "ok", "error": None})
         self._write(ev)
         return result
-
-    def chat_completion_stream(self, messages, *, model=None, temperature=0.7, **kwargs) -> Iterator[str]:
-        # Not observed in v1: the main flow never uses streaming.
-        yield from self._inner.chat_completion_stream(
-            messages, model=model, temperature=temperature, **kwargs
-        )

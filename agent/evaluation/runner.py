@@ -4,13 +4,16 @@ import time
 from dataclasses import dataclass
 
 from agent.chat import Chat
-from agent.config import AgentConfig, DomainConfig
+from agent.config import AgentConfig, DomainConfig, resolve_judge_model
 from agent.llm import ChatResult, LLMClient
+from agent.loggers import get_logger
 from agent.model_router import resolve_model
 from agent.router import Router
 
 from .dataset import EvalCase, Suite
 from .judge import Judge
+
+logger = get_logger("evaluation")
 
 
 class RecordingClient:
@@ -23,10 +26,6 @@ class RecordingClient:
     def __init__(self, inner: LLMClient):
         self._inner = inner
         self.calls: list[dict] = []
-
-    @property
-    def model(self) -> str:
-        return self._inner.model
 
     def reset(self) -> None:
         self.calls = []
@@ -46,11 +45,6 @@ class RecordingClient:
             "latency_ms": elapsed,
         })
         return result
-
-    def chat_completion_stream(self, messages, *, model=None, temperature=0.7, **kwargs):
-        yield from self._inner.chat_completion_stream(
-            messages, model=model, temperature=temperature, **kwargs
-        )
 
 
 @dataclass
@@ -91,6 +85,7 @@ def run_evaluation(
     domain: DomainConfig,
     suite: Suite,
     client: LLMClient,
+    judge_client: LLMClient | None = None,
     *,
     skip_quality: bool = False,
 ) -> list[CaseResult]:
@@ -112,16 +107,22 @@ def run_evaluation(
         router's classification call, the answer-pipeline calls, and the judge
         call are summed into one case's token totals (intentional: full
         pipeline cost per case, which is why ``llm_calls`` is typically >= 3).
+      - When ``judge_client`` is given, the judge's calls are recorded on a
+        separate recorder (``judge_recorder``) but still summed into the same
+        per-case totals.
       - ``skip_quality`` still runs the router, so it does not reduce the case
         to zero LLM calls.
     """
     recorder = RecordingClient(client)
+    judge_recorder = RecordingClient(judge_client) if judge_client is not None else None
     router = Router(recorder, config, domain)
-    judge = Judge(recorder,
-                  config.evaluation.judge_model if config.evaluation else config.model)
+    judge = Judge(judge_recorder if judge_recorder is not None else recorder,
+                  resolve_judge_model(config))
     results: list[CaseResult] = []
     for case in suite.cases:
         recorder.reset()
+        if judge_recorder is not None:
+            judge_recorder.reset()
         route = None
         expected_model = None
         answer = None
@@ -131,7 +132,7 @@ def run_evaluation(
         try:
             chat = Chat(recorder, config, domain)  # fresh history per case
             route = router.route(case.question)
-            expected_model = resolve_model(config, domain, route, config.model)
+            expected_model = resolve_model(config, route, config.model)
             if case.answer_quality and not skip_quality:
                 resp = chat.respond(case.question, route=route)
                 answer = resp.text
@@ -147,7 +148,9 @@ def run_evaluation(
                 scorecard = judge.score(case.question, answer, reference=case.reference)
         except Exception as e:  # noqa: BLE001 -- one failing case must not abort the run
             error = f"{type(e).__name__}: {e}"
-        costs = _sum_calls(recorder.calls)
+            logger.warning("eval case error", case=case.id, error=error)
+        calls = recorder.calls + (judge_recorder.calls if judge_recorder is not None else [])
+        costs = _sum_calls(calls)
         results.append(CaseResult(
             case=case,
             in_domain=bool(route and route.in_domain),

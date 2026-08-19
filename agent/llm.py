@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterator
 
 from openai import OpenAI, OpenAIError
 
 from .capabilities import ProviderCapabilities
+from .loggers import get_logger
 from .negotiate import negotiate_structured_output
+
+logger = get_logger("llm")
 
 
 class LLMError(Exception):
@@ -30,6 +32,7 @@ class LLMClient:
         if timeout is not None:
             kwargs["timeout"] = timeout
         self.client = OpenAI(**kwargs)
+        self.base_url = base_url
         self.model = model
         self.capabilities = ProviderCapabilities(
             provider=provider or "unknown", **capability_overrides or {}
@@ -86,23 +89,5 @@ class LLMClient:
                 cache_tokens=cached if isinstance(cached, int) else 0,
             )
         except OpenAIError as e:
-            raise LLMError(f"LLM API call failed: {e}") from e
-
-    def chat_completion_stream(
-        self, messages: list[dict], *, model: str | None = None, temperature: float = 0.7
-    ) -> Iterator[str]:
-        try:
-            stream = self.client.chat.completions.create(
-                model=model or self.model,
-                messages=messages,
-                temperature=temperature,
-                stream=True,
-            )
-            for chunk in stream:
-                choices = chunk.choices
-                if choices:
-                    content = choices[0].delta.content
-                    if content:
-                        yield content
-        except OpenAIError as e:
+            logger.exception("llm error", model=self.model, endpoint=self.base_url)
             raise LLMError(f"LLM API call failed: {e}") from e

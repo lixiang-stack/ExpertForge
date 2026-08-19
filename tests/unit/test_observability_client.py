@@ -2,7 +2,7 @@ import pytest
 
 from agent.llm import ChatResult, LLMError
 from agent.observability.client import TracedLLMClient
-from agent.observability.tracing import TraceStore, current_phase, phase, trace_span
+from agent.observability.tracing import TraceStore, phase, trace_span
 
 
 class FakeInner:
@@ -25,10 +25,6 @@ class FakeInner:
             total_tokens=getattr(u, "total_tokens", 0) if u else 0,
             cache_tokens=0,
         )
-
-    def chat_completion_stream(self, messages, **kwargs):
-        for chunk in ["a", "b"]:
-            yield chunk
 
 
 class _Usage:
@@ -85,11 +81,3 @@ def test_records_usage_zero_when_missing(tmp_path):
         traced.chat_completion([{"role": "user", "content": "hi"}])
     ev = store.trace_llm_calls(tid)[0]
     assert ev["prompt_tokens"] == 0
-
-
-def test_stream_delegates_without_recording(tmp_path):
-    store = _make_store(tmp_path)
-    traced = TracedLLMClient(FakeInner(), store)
-    out = list(traced.chat_completion_stream([{"role": "user", "content": "hi"}]))
-    assert out == ["a", "b"]
-    assert store.trace_llm_calls("anything") == []

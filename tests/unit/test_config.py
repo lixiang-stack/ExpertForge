@@ -8,9 +8,10 @@ from agent.config import (
     DomainConfig,
     IntentDef,
     get_api_key,
+    get_judge_api_key,
     load_config,
-    load_domain_config,
 )
+from agent.domain_config import load_domain_config
 
 ORCHESTRATION_YAML = (
     "enabled: true\n"
@@ -633,18 +634,80 @@ def test_load_config_observability_ignores_non_dict(tmp_path, monkeypatch):
     assert cfg.observability is None
 
 
-def test_load_config_evaluation_judge_model_and_results_dir(tmp_path, monkeypatch):
+def test_load_config_evaluation_judge_block_and_results_dir(tmp_path, monkeypatch):
     monkeypatch.delenv("AGENT_BASE_URL", raising=False)
     path = _write_config(tmp_path, {
         "base_url": "https://api.example.com/v1",
         "model": "model-a",
         "domain_dir": "domain/software_engineering",
-        "evaluation": {"judge_model": "judge-a", "results_dir": "eval/results"},
+        "evaluation": {
+            "results_dir": "eval/results",
+            "judge": {
+                "base_url": "https://judge.example.com/v1",
+                "model": "judge-a",
+                "provider": "judge-provider",
+                "provider_capabilities": {"supports_tool_call": True},
+                "timeout": 30,
+            },
+        },
     })
     cfg = load_config(path)
     assert cfg.evaluation is not None
-    assert cfg.evaluation.judge_model == "judge-a"
     assert cfg.evaluation.results_dir == "eval/results"
+    judge = cfg.evaluation.judge
+    assert judge is not None
+    assert judge.base_url == "https://judge.example.com/v1"
+    assert judge.model == "judge-a"
+    assert judge.provider == "judge-provider"
+    assert judge.provider_capabilities is not None
+    assert judge.provider_capabilities.supports_tool_call is True
+    assert judge.timeout == 30
+
+
+def test_get_judge_api_key(monkeypatch):
+    monkeypatch.setenv("AGENT_JUDGE_API_KEY", "judge-secret")
+    assert get_judge_api_key() == "judge-secret"
+
+
+def test_get_judge_api_key_missing(monkeypatch):
+    monkeypatch.delenv("AGENT_JUDGE_API_KEY", raising=False)
+    with pytest.raises(ConfigError, match="AGENT_JUDGE_API_KEY"):
+        get_judge_api_key()
+
+
+def test_load_config_evaluation_judge_falls_back_to_top_level(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "evaluation": {
+            "results_dir": "eval/results",
+            "judge": {"timeout": 45},
+        },
+    })
+    cfg = load_config(path)
+    judge = cfg.evaluation.judge
+    assert judge is not None
+    assert judge.base_url == "https://api.example.com/v1"
+    assert judge.model == "model-a"
+    assert judge.provider == "test"
+    assert judge.provider_capabilities is None
+    assert judge.timeout == 45
+
+
+def test_load_config_evaluation_judge_default_none(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "evaluation": {"results_dir": "eval/results"},
+    })
+    cfg = load_config(path)
+    assert cfg.evaluation is not None
+    assert cfg.evaluation.results_dir == "eval/results"
+    assert cfg.evaluation.judge is None
 
 
 def test_load_config_evaluation_defaults(tmp_path, monkeypatch):
@@ -655,7 +718,9 @@ def test_load_config_evaluation_defaults(tmp_path, monkeypatch):
         "domain_dir": "domain/software_engineering",
     })
     cfg = load_config(path)
-    assert cfg.evaluation is None
+    assert cfg.evaluation is not None
+    assert cfg.evaluation.results_dir == "evaluation/results"
+    assert cfg.evaluation.judge is None
 
 
 def test_load_config_evaluation_ignores_non_dict(tmp_path, monkeypatch):
@@ -667,7 +732,114 @@ def test_load_config_evaluation_ignores_non_dict(tmp_path, monkeypatch):
         "evaluation": "nope",
     })
     cfg = load_config(path)
-    assert cfg.evaluation is None
+    assert cfg.evaluation is not None
+    assert cfg.evaluation.results_dir == "evaluation/results"
+    assert cfg.evaluation.judge is None  # non-dict evaluation treated as an empty block
+
+
+def test_load_config_evaluation_results_dir_non_string_falls_back(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "evaluation": {"results_dir": 123},
+    })
+    cfg = load_config(path)
+    assert cfg.evaluation is not None
+    assert cfg.evaluation.results_dir == "evaluation/results"
+
+
+def test_load_config_judge_unknown_capability_raises(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "evaluation": {"judge": {"provider_capabilities": {"supports_magic": True}}},
+    })
+    with pytest.raises(ConfigError):
+        load_config(path)
+
+
+def test_load_config_judge_non_boolean_capability_raises(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "evaluation": {"judge": {"provider_capabilities": {"supports_json_schema": "yes"}}},
+    })
+    with pytest.raises(ConfigError):
+        load_config(path)
+
+
+def test_load_config_judge_invalid_timeout_defaults(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "evaluation": {"judge": {"timeout": "soon"}},
+    })
+    cfg = load_config(path)
+    assert cfg.evaluation.judge is not None
+    assert cfg.evaluation.judge.timeout == 60
+
+
+def test_load_config_logging_block_parsed(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "logging": {"enabled": True, "level": "DEBUG", "file": "logs/out.jsonl"},
+    })
+    cfg = load_config(path)
+    assert cfg.logging is not None
+    assert cfg.logging.enabled is True
+    assert cfg.logging.level == "DEBUG"
+    assert cfg.logging.file == "logs/out.jsonl"
+
+
+def test_load_config_logging_unknown_level_raises(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "logging": {"enabled": True, "level": "VERBOSE"},
+    })
+    with pytest.raises(ConfigError):
+        load_config(path)
+
+
+def test_load_config_logging_non_dict_disabled_defaults(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "logging": "nope",
+    })
+    cfg = load_config(path)
+    assert cfg.logging is not None
+    assert cfg.logging.enabled is False
+    assert cfg.logging.level == "INFO"
+    assert cfg.logging.file == "logs/agent.jsonl"
+
+
+def test_load_config_logging_string_enabled_coerced_false(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
+    path = _write_config(tmp_path, {
+        "base_url": "https://api.example.com/v1",
+        "model": "model-a",
+        "domain_dir": "domain/software_engineering",
+        "logging": {"enabled": "false"},
+    })
+    cfg = load_config(path)
+    assert cfg.logging is not None
+    assert cfg.logging.enabled is False
 
 
 def test_load_domain_config_intent_definition_fields(tmp_path):

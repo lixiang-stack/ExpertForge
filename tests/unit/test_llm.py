@@ -74,26 +74,6 @@ def test_chat_completion_omits_extra_body_when_provider_unsupported(mock_openai)
 
 
 @patch("agent.llm.OpenAI")
-def test_chat_completion_stream_yields_content(mock_openai):
-    chunk1 = MagicMock()
-    chunk1.choices[0].delta.content = "世"
-    chunk2 = MagicMock()
-    chunk2.choices[0].delta.content = "界"
-    empty = MagicMock()
-    empty.choices[0].delta.content = None
-    mock_openai.return_value.chat.completions.create.return_value = iter(
-        [chunk1, empty, chunk2]
-    )
-
-    client = LLMClient("https://api.example.com/v1", "key", "model-a")
-    out = list(client.chat_completion_stream([{"role": "user", "content": "hi"}]))
-
-    assert out == ["世", "界"]
-    kwargs = mock_openai.return_value.chat.completions.create.call_args.kwargs
-    assert kwargs["stream"] is True
-
-
-@patch("agent.llm.OpenAI")
 def test_chat_completion_none_content_returns_empty_string(mock_openai):
     resp = MagicMock()
     resp.choices[0].message.content = None

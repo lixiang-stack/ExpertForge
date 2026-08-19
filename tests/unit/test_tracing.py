@@ -2,7 +2,6 @@ import json
 import threading
 import time
 import warnings
-from pathlib import Path
 
 from agent.observability.tracing import (
     TraceStore,

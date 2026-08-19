@@ -1,4 +1,4 @@
-from agent.config import AgentConfig, DomainConfig, EvaluationConfig, IntentDef
+from agent.config import AgentConfig, DomainConfig, EvaluationConfig, IntentDef, JudgeConfig
 from agent.evaluation.dataset import Suite, EvalCase
 from agent.evaluation.runner import RecordingClient, run_evaluation
 
@@ -35,7 +35,8 @@ def _domain():
 def _config():
     return AgentConfig(base_url="https://x", model="m", classifier_model="cm",
                        domain_dir="d", model_low="low-a", model_high="high-a",
-                       evaluation=EvaluationConfig(judge_model="judge-a"))
+                       evaluation=EvaluationConfig(
+                           judge=JudgeConfig(base_url="https://j", model="judge-a", provider="p")))
 
 
 from agent.llm import ChatResult, LLMError
@@ -119,6 +120,91 @@ def test_run_evaluation_answers_and_judges():
     assert r0.out_tokens == 15
     assert r0.total_tokens == 50
     assert r0.cache_tokens == 7
+
+
+def test_run_evaluation_uses_dedicated_judge_client():
+    suite = Suite(name="direct", domain="software_engineering", cases=[
+        EvalCase(
+            id="se-001", question="what is defer",
+            expected_domain="software_engineering",
+            expected_intent="faq", expected_complexity="simple",
+            expected_strategy="direct", expected_orchestrate=False,
+            answer_quality=True, reference="short",
+        ),
+        EvalCase(
+            id="se-002", question="what is a monad",
+            expected_domain="software_engineering",
+            expected_intent="faq", expected_complexity="simple",
+            expected_strategy="direct", expected_orchestrate=False,
+            answer_quality=True, reference="medium",
+        ),
+    ])
+    client = FakeClient([
+        '{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}',
+        "the answer",
+        '{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}',
+        "second answer",
+    ])
+    client._record_usage(10, 5, cached=2)   # classification (case 1)
+    client._record_usage(20, 8, cached=4)   # answer generation (case 1)
+    client._record_usage(11, 6, cached=3)   # classification (case 2)
+    client._record_usage(21, 9, cached=5)   # answer generation (case 2)
+    judge_client = FakeClient([
+        '{"correctness": 4, "relevance": 5, "completeness": 3, '
+        '"technical_depth": 4, "practical_usefulness": 5, "hallucination": 4}',
+        '{"correctness": 5, "relevance": 5, "completeness": 4, '
+        '"technical_depth": 4, "practical_usefulness": 5, "hallucination": 5}',
+    ])
+    judge_client._record_usage(5, 2, cached=1)  # judge (case 1)
+    judge_client._record_usage(6, 3, cached=2)  # judge (case 2)
+    results = run_evaluation(_config(), _domain(), suite, client,
+                             judge_client=judge_client)
+    assert len(results) == 2
+    r0 = results[0]
+    assert r0.answer == "the answer"
+    assert r0.scorecard is not None
+    assert r0.scorecard["correctness"] == 4
+    assert r0.actual_model == "low-a"  # answer model, not the judge's
+    assert r0.llm_calls == 3
+    assert r0.in_tokens == 35
+    assert r0.out_tokens == 15
+    assert r0.total_tokens == 50
+    assert r0.cache_tokens == 7
+    r1 = results[1]
+    assert r1.answer == "second answer"
+    assert r1.scorecard is not None
+    assert r1.scorecard["correctness"] == 5
+    assert r1.llm_calls == 3       # judge_recorder was reset between cases
+    assert r1.in_tokens == 38
+    assert r1.out_tokens == 18
+    assert r1.total_tokens == 56
+    assert r1.cache_tokens == 10
+    assert judge_client.call_count == 2  # both judge calls went to the dedicated client
+    assert client.call_count == 4        # only route + answer calls on the main client
+
+
+def test_run_evaluation_without_judge_client_uses_main_client_for_judge():
+    client = FakeClient([
+        '{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}',
+        "the answer",
+        '{"correctness": 4, "relevance": 5, "completeness": 3, '
+        '"technical_depth": 4, "practical_usefulness": 5, "hallucination": 4}',
+        '{"in_domain": false, "intent": null, "complexity": null, "reason": "unrelated"}',
+    ])
+    client._record_usage(10, 5, cached=2)   # classification
+    client._record_usage(20, 8, cached=4)   # answer generation
+    client._record_usage(5, 2, cached=1)    # judge
+    results = run_evaluation(_config(), _domain(), _dataset(), client)
+    assert len(results) == 2
+    r0 = results[0]
+    assert r0.scorecard is not None
+    assert r0.scorecard["correctness"] == 4
+    assert r0.llm_calls == 3
+    assert r0.in_tokens == 35
+    assert r0.out_tokens == 15
+    assert r0.total_tokens == 50
+    assert r0.cache_tokens == 7
+    assert client.call_count == 4  # judge call still on the main client
 
 
 def test_run_evaluation_rejects_out_of_domain():

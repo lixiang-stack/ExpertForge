@@ -3,8 +3,10 @@ from __future__ import annotations
 import sys
 
 from .chat import Chat
-from .config import ConfigError, get_api_key, load_config, load_domain_config
+from .config import ConfigError, get_api_key, load_config
+from .domain_config import load_domain_config
 from .llm import LLMClient
+from .loggers import get_logger, setup_logging
 from .observability import install
 from .repl import run_repl
 
@@ -35,6 +37,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Config error: {e}", file=sys.stderr)
         return 1
 
+    if config.logging is not None:
+        setup_logging(config.logging)
+    logger = get_logger("cli")
+    logger.info("agent startup", domain=domain.name, config=config_path)
+
     client = LLMClient(base_url=config.base_url, api_key=api_key, model=config.model,
                        timeout=config.timeout,
                        provider=config.provider,
@@ -47,7 +54,13 @@ def main(argv: list[str] | None = None) -> int:
         else:
             run_repl(client, config, domain)
     except KeyboardInterrupt:
+        logger.info("agent shutdown", interrupted=True)
         print("\nBye.")
+    except Exception:
+        logger.exception("agent crashed")
+        raise
+    else:
+        logger.info("agent shutdown")
     return 0
 
 

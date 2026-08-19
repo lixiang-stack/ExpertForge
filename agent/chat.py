@@ -4,10 +4,13 @@ from dataclasses import dataclass
 
 from .config import AgentConfig, DomainConfig
 from .llm import LLMClient
+from .loggers import get_logger
 from .model_router import resolve_model
 from .orchestrator import Orchestrator
 from .strategy import build_registry
 from .router import RouteResult, Router
+
+logger = get_logger("chat")
 
 
 @dataclass
@@ -35,10 +38,17 @@ class Chat:
                 text += f" ({route.reject_reason})"
             return ChatResponse(kind="reject", text=text)
         processor = self.processors[route.strategy]
-        model = resolve_model(self.config, self.domain, route, self.config.model)
-        if route.orchestrate:
-            answer = self.orchestrator.run(question, route, model)
-        else:
-            answer = processor.process(self.client, question, self.history, model=model)
+        model = resolve_model(self.config, route, self.config.model)
+        try:
+            if route.orchestrate:
+                answer = self.orchestrator.run(question, route, model)
+            else:
+                answer = processor.process(self.client, question, self.history, model=model)
+        except Exception:
+            logger.exception(
+                "answer generation failed", strategy=route.strategy, model=model
+            )
+            raise
         self.history.append((question, answer))
+        logger.info("answer generated", strategy=route.strategy, model=model)
         return ChatResponse(kind="answer", text=answer)
