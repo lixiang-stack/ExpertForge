@@ -1,0 +1,14 @@
+cases:
+  - id: se-010
+    tier: classification
+    question: "What is dependency injection?"
+    expected: {domain: software_engineering, intent: concept_explain, complexity: simple, strategy: teaching, orchestrate: false}
+    reference: "Dependency injection is a technique where a component receives its dependencies from outside rather than constructing them itself, improving testability and decoupling."
+  - id: se-121
+    tier: classification
+    question: "Why does dependency injection reduce coupling?"
+    expected: {domain: software_engineering, intent: concept_explain, complexity: medium, strategy: teaching, orchestrate: false}
+  - id: se-127
+    tier: classification
+    question: "Walk me through the 12-factor app principles, one by one, in full detail."
+    expected: {domain: software_engineering, intent: concept_explain, complexity: simple, strategy: teaching, orchestrate: false}

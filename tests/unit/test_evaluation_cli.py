@@ -24,11 +24,12 @@ def test_main_run_prints_summary_and_writes_file(tmp_path, monkeypatch):
     dataset_dir.mkdir(parents=True)
     suite_dir = dataset_dir / "software_engineering"
     suite_dir.mkdir()
-    (suite_dir / "direct.yaml").write_text(
+    (suite_dir / "faq.yaml").write_text(
         'cases:\n'
         '  - id: a\n'
         '    question: "q"\n'
-        '    answer_quality: false\n'
+        '    tier: classification\n'
+        '    smoke: true\n'
         '    expected:\n'
         '      domain: software_engineering\n'
         '      intent: faq\n'
@@ -73,7 +74,6 @@ def test_main_run_prints_summary_and_writes_file(tmp_path, monkeypatch):
         "--dataset", str(suite_dir),
         "--label", "x",
         "--results-dir", str(results_dir),
-        "--skip-quality",
     ])
     assert rc == 0
     text = out.getvalue()
@@ -101,11 +101,12 @@ def _suite_cli_env(tmp_path):
     dataset_dir.mkdir(parents=True)
     suite_dir = dataset_dir / "software_engineering"
     suite_dir.mkdir()
-    (suite_dir / "direct.yaml").write_text(
+    (suite_dir / "faq.yaml").write_text(
         'cases:\n'
         '  - id: a\n'
         '    question: "q"\n'
-        '    answer_quality: false\n'
+        '    tier: classification\n'
+        '    smoke: true\n'
         '    expected:\n'
         '      domain: software_engineering\n'
         '      intent: faq\n'
@@ -113,7 +114,7 @@ def _suite_cli_env(tmp_path):
         '      strategy: direct\n'
         '  - id: a2\n'
         '    question: "q2"\n'
-        '    answer_quality: false\n'
+        '    tier: routing\n'
         '    expected:\n'
         '      domain: software_engineering\n'
         '      intent: faq\n'
@@ -121,16 +122,16 @@ def _suite_cli_env(tmp_path):
         '      strategy: direct\n',
         encoding="utf-8",
     )
-    (suite_dir / "teaching.yaml").write_text(
+    (suite_dir / "concept_explain.yaml").write_text(
         'cases:\n'
         '  - id: b\n'
         '    question: "q"\n'
-        '    answer_quality: false\n'
+        '    tier: classification\n'
         '    expected:\n'
         '      domain: software_engineering\n'
-        '      intent: faq\n'
+        '      intent: concept_explain\n'
         '      complexity: simple\n'
-        '      strategy: direct\n',
+        '      strategy: teaching\n',
         encoding="utf-8",
     )
 
@@ -168,38 +169,50 @@ def _run_with_fake(monkeypatch, argv):
     return out.getvalue()
 
 
-def test_main_run_suite_selection(tmp_path, monkeypatch):
+def test_main_run_default_is_smoke(tmp_path, monkeypatch):
     config_path, suite_dir = _suite_cli_env(tmp_path)
     monkeypatch.setenv("AGENT_API_KEY", "k")
     out = _run_with_fake(monkeypatch, [
         "run", "--config", str(config_path), "--dataset", str(suite_dir),
-        "--suite", "direct", "--label", "sel", "--results-dir", str(tmp_path / "r"),
-        "--skip-quality",
+        "--label", "smoke", "--results-dir", str(tmp_path / "r"),
     ])
-    assert "Per-suite" in out
-    assert "direct" in out
-    assert "teaching" not in out
+    assert "cases=1" in out  # only the smoke case runs
+    assert "selection=smoke" in out
+    assert "Per-tier" in out
+    assert "classification: n=1" in out
 
 
-def test_main_run_max_per_suite(tmp_path, monkeypatch):
+def test_main_run_tier_selection(tmp_path, monkeypatch):
     config_path, suite_dir = _suite_cli_env(tmp_path)
     monkeypatch.setenv("AGENT_API_KEY", "k")
     out = _run_with_fake(monkeypatch, [
         "run", "--config", str(config_path), "--dataset", str(suite_dir),
-        "--max-per-suite", "1", "--label", "mx", "--results-dir", str(tmp_path / "r"),
-        "--skip-quality",
+        "--tier", "classification", "--label", "cls", "--results-dir", str(tmp_path / "r"),
     ])
-    assert "Per-suite" in out
-    assert "direct: n=1" in out  # 2-case direct suite truncated to 1
-    assert "teaching: n=1" in out
+    assert "cases=2" in out  # a + b
+    assert "selection=tiers: classification" in out
 
 
-def test_main_max_per_suite_lt_1_returns_1(monkeypatch, capsys):
-    monkeypatch.delenv("AGENT_BASE_URL", raising=False)
-    rc = eval_main.main(["run", "--max-per-suite", "0"])
+def test_main_run_tier_all(tmp_path, monkeypatch):
+    config_path, suite_dir = _suite_cli_env(tmp_path)
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    out = _run_with_fake(monkeypatch, [
+        "run", "--config", str(config_path), "--dataset", str(suite_dir),
+        "--tier", "all", "--label", "all", "--results-dir", str(tmp_path / "r"),
+    ])
+    assert "cases=3" in out
+
+
+def test_main_run_no_matching_tier_returns_1(tmp_path, monkeypatch, capsys):
+    config_path, suite_dir = _suite_cli_env(tmp_path)
+    monkeypatch.setenv("AGENT_API_KEY", "k")
+    rc = eval_main.main([
+        "run", "--config", str(config_path), "--dataset", str(suite_dir),
+        "--tier", "full_expert", "--results-dir", str(tmp_path / "r"),
+    ])
     assert rc == 1
     err = capsys.readouterr().err
-    assert "--max-per-suite must be >= 1" in err
+    assert "No cases match the selection" in err
 
 
 def test_main_diff(tmp_path, monkeypatch):
@@ -267,7 +280,7 @@ def test_main_passes_provider_and_capability_overrides_from_config(tmp_path, mon
     monkeypatch.setattr(sys, "stdout", out)
     rc = eval_main.main([
         "run", "--config", str(config_path), "--dataset", str(suite_dir),
-        "--label", "pc", "--results-dir", str(tmp_path / "r"), "--skip-quality",
+        "--label", "pc", "--results-dir", str(tmp_path / "r"),
     ])
     assert rc == 0
     assert captured["provider"] == "gemini"
@@ -313,7 +326,7 @@ def test_main_judge_client_gets_capabilities_from_judge_config(tmp_path, monkeyp
     monkeypatch.setattr(sys, "stdout", out)
     rc = eval_main.main([
         "run", "--config", str(config_path), "--dataset", str(suite_dir),
-        "--label", "jc", "--results-dir", str(tmp_path / "r"), "--skip-quality",
+        "--label", "jc", "--results-dir", str(tmp_path / "r"),
     ])
     assert rc == 0
     assert len(captured) == 2  # main client + judge client
@@ -362,7 +375,7 @@ def test_main_judge_client_capabilities_fall_back_to_top_level(tmp_path, monkeyp
     monkeypatch.setattr(sys, "stdout", out)
     rc = eval_main.main([
         "run", "--config", str(config_path), "--dataset", str(suite_dir),
-        "--label", "jc", "--results-dir", str(tmp_path / "r"), "--skip-quality",
+        "--label", "jc", "--results-dir", str(tmp_path / "r"),
     ])
     assert rc == 0
     assert len(captured) == 2
@@ -399,7 +412,7 @@ def test_main_judge_client_missing_key_returns_1(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(eval_main, "LLMClient", FakeClient)
     rc = eval_main.main([
         "run", "--config", str(config_path), "--dataset", str(suite_dir),
-        "--label", "jc", "--results-dir", str(tmp_path / "r"), "--skip-quality",
+        "--label", "jc", "--results-dir", str(tmp_path / "r"),
     ])
     assert rc == 1
     err = capsys.readouterr().err
@@ -413,27 +426,30 @@ def _result_record(domain_accuracy):
         "label": "run",
         "model": "m",
         "judge_model": None,
-        "skip_quality": True,
+        "smoke_only": False,
         "dataset": "evaluation/datasets/software_engineering",
-        "suites": ["direct", "teaching"],
+        "tiers": ["classification", "routing"],
         "metrics": {
             "n_cases": 2,
             "classification": {"domain_accuracy": domain_accuracy, "intent_accuracy": 1.0,
                                "complexity_accuracy": 1.0, "per_intent": {}},
-            "routing": {"strategy_accuracy": 1.0, "orchestration_accuracy": 1.0,
-                        "model_routing_accuracy": 1.0},
+            "routing": {"strategy_accuracy": 1.0, "per_strategy": {},
+                        "orchestration_accuracy": 1.0, "model_routing_accuracy": 1.0},
             "answer_quality": {},
             "cost": {"llm_calls": 2, "in_tokens": 10, "out_tokens": 5,
                      "total_tokens": 15, "cache_tokens": 0, "latency_ms": 20.0,
                      "by_path": {}},
         },
-        "metrics_by_suite": {
-            "direct": {"n_cases": 1, "classification": {"domain_accuracy": domain_accuracy},
-                       "routing": {}, "cost": {}},
-            "teaching": {"n_cases": 1, "classification": {"domain_accuracy": domain_accuracy},
-                         "routing": {}, "cost": {}},
+        "metrics_by_tier": {
+            "classification": {"n_cases": 1, "classification": {"domain_accuracy": domain_accuracy},
+                               "routing": {}, "cost": {}},
+            "routing": {"n_cases": 1, "classification": {"domain_accuracy": domain_accuracy},
+                        "routing": {}, "cost": {}},
+            "full_expert": {"n_cases": 0, "classification": {}, "routing": {}, "cost": {}},
         },
-        "cases": [{"id": "a", "suite": "direct"}, {"id": "b", "suite": "teaching"}],
+        "failed_cases": [],
+        "cases": [{"id": "a", "suite": "faq", "tier": "classification"},
+                  {"id": "a2", "suite": "faq", "tier": "routing"}],
     }
 
 
@@ -451,7 +467,7 @@ def test_main_baseline_writes_slim_file(tmp_path, monkeypatch, capsys):
     baseline = json.loads(out_path.read_text(encoding="utf-8"))
     assert "cases" not in baseline
     assert baseline["metrics"]["classification"]["domain_accuracy"] == 1.0
-    assert baseline["metrics_by_suite"]["direct"]["n_cases"] == 1
+    assert baseline["metrics_by_tier"]["classification"]["n_cases"] == 1
     assert "Baseline written" in out.getvalue()
 
 
