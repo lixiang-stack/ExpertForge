@@ -20,7 +20,7 @@ draft_v3 的下一阶段目标是建立"低成本、可持续迭代的 Expert Ev
 | # | Question | Decision |
 |---|---|---|
 | 1 | tier 与现有 suite 的关系 | 每个 case 增加 `tier` 字段（classification / routing / full_expert），suite 内允许混层。 |
-| 2 | suite 是否保留 | **不保留为模型/CLI 概念**。YAML 文件按策略分组仅作存储布局（编辑时好找），模型层视为扁平 case 池；删除 `--suite` 与 `metrics_by_suite`。 |
+| 2 | suite 是否保留 | **不保留为模型/CLI 概念**。YAML 文件按 **intent 分组 + boundary.yaml** 仅作存储布局（与内部 strategy / orchestration 概念解耦），模型层视为扁平 case 池；删除 `--suite` 与 `metrics_by_suite`。 |
 | 3 | CLI 深度选择 | `--tier <tier> [<tier>...]`；`--tier all` 为完整回归别名；**无 `--tier` 时默认只跑 `smoke: true` 的 case**（防 token 超耗）。 |
 | 4 | 冗余 flag 处置 | 删除 `--max-per-suite`、`--skip-quality`、`--smoke`。默认即 smoke，无需显式开关；tier 体系取代 skip-quality 的省钱作用。 |
 | 5 | `answer_quality` 字段 | 删除，由 tier 推导：full_expert ⇒ 完整 pipeline + judge；其余 ⇒ 仅 router 调用。 |
@@ -53,18 +53,35 @@ cases:
 ### 1.2 加载模型
 
 - 保留按目录扫描 `*.yaml` 的加载方式；每个文件仍是一个 `Suite`（存储单元），但 **选择与统计不再以 suite 为单位**。
+- **文件按 intent 分组 + boundary.yaml 组织**（faq.yaml、concept_explain.yaml、troubleshooting.yaml、boundary.yaml…）。intent 是问题固有属性；strategy / orchestrate / tier 都是推导结果，仅作为每个 case 的字段，不参与文件命名。
 - 加载后展平为 case 池，`tier` 是唯一深度选择轴；文件边界对运行语义无影响。
 - 校验：tier 取值合法；`smoke: true` 的 case 的 expected 字段完整；full_expert case 的 expected 完整。
 
 ### 1.3 现有 case 迁移规则
 
-| 现状 | 迁移为 |
-|---|---|
-| `orchestrate: true`（orchestration.yaml 的 3 个） | `full_expert` |
-| boundary / 纯分类校验（classification.yaml 的 se-110 等） | `classification` |
-| 路由/策略校验（routing.yaml 的 3 个） | `routing` |
-| direct/teaching/code_snippet 的策略 case（simple/medium，验证 intent+complexity 分类） | `classification` |
-| debugging/analysis 的策略 case（troubleshooting/performance，验证 strategy 选择） | `routing` |
+**文件重组**：8 个策略/阶段命名文件（direct/teaching/debugging/analysis/code_snippet/classification/routing/orchestration）→ 按 intent 命名的 11 个文件 + boundary.yaml。
+
+| intent / 角色 | 文件 | 现有 case |
+|---|---|---|
+| OOD 边界 | `boundary.yaml` | se-110 |
+| faq | `faq.yaml` | se-001, se-003, se-120 |
+| concept_explain | `concept_explain.yaml` | se-010, se-121, se-127 |
+| tutorial | `tutorial.yaml` | se-020, se-122 |
+| learning_guide | `learning_guide.yaml` | se-030, se-123 |
+| summarization | `summarization.yaml` | se-040 |
+| troubleshooting | `troubleshooting.yaml` | se-050, se-051, se-052, se-053, se-054, se-140 |
+| performance_analysis | `performance_analysis.yaml` | se-060, se-062, se-124 |
+| architecture_design | `architecture_design.yaml` | se-070, se-071, se-082, se-126, se-128 |
+| comparison | `comparison.yaml` | se-081, se-125 |
+| code_review | `code_review.yaml` | se-090 |
+| generate_code | `generate_code.yaml` | se-100, se-101, se-102, se-103 |
+
+**tier 赋值**（逐 case 标注，与文件组织无关）：
+
+- `orchestrate: true` 的 case（se-052, se-071, se-102, se-126, se-128）→ `full_expert`
+- 映射到 analysis/debugging 策略的 intent（troubleshooting / performance_analysis / architecture_design / comparison / code_review）→ `routing`（验证 strategy 选择）
+- 其余 intent（faq / concept_explain / tutorial / learning_guide / summarization / generate_code）→ `classification`
+- OOD 边界 → `classification`
 
 迁移后 judge 只覆盖 full_expert tier（10~20 个）。原先按策略 suite 测"每个策略的答案质量"的做法被路由层（strategy_accuracy + per-strategy 分解）取代，答案质量只对最高价值的复杂 case 测量。这是对现有评价哲学的有意收缩，与 draft §2.4 一致。
 
@@ -139,7 +156,7 @@ python -m agent.evaluation baseline result.json
 
 ## 6. Dataset Migration
 
-- 对现有 8 个 YAML 的 ~33 个 case 按 §1.3 规则补充 `tier` 字段，删除 `answer_quality`。
+- 将现有 8 个按策略/阶段命名的 YAML 重组为按 intent 命名的 11 个文件 + `boundary.yaml`（见 §1.3 映射表），对 ~33 个 case 补充 `tier` 字段，删除 `answer_quality`。
 - 挑选约 5 个 case 标记 `smoke: true`（覆盖三层）。
 - 迁移后运行 `run` 默认跑 smoke；`--tier all` 可验证全量迁移无损。
 
