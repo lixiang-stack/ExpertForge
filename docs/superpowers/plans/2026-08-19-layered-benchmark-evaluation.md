@@ -4,7 +4,7 @@
 
 **Goal:** Introduce a `tier` axis (classification / routing / full_expert) to the evaluation datasets, make `tier` the single execution-depth selector, default runs to the curated smoke set, and drop the obsolete `--suite` / `--max-per-suite` / `--skip-quality` flags.
 
-**Architecture:** The dataset keeps its per-strategy YAML files purely as storage layout; the model layer becomes a flat case pool where each case carries `tier` (and optional `smoke`). Execution depth is derived from tier (`full_expert` ⇒ full pipeline + judge; otherwise router-only). The CLI selects by `--tier` (or defaults to `smoke: true` cases), and metrics/reports group by tier instead of by suite.
+**Architecture:** The dataset keeps its per-intent YAML files (+ `boundary.yaml`) purely as storage layout; the model layer becomes a flat case pool where each case carries `tier` (and optional `smoke`). Execution depth is derived from tier (`full_expert` ⇒ full pipeline + judge; otherwise router-only). The CLI selects by `--tier` (or defaults to `smoke: true` cases), and metrics/reports group by tier instead of by suite.
 
 **Tech Stack:** Python 3.x, PyYAML, argparse, pytest, ruff.
 
@@ -246,41 +246,40 @@ git commit -m "feat: add tier and smoke fields to evaluation dataset model"
 
 ---
 
-### Task 2: Migrate the dataset YAML files to `tier` + smoke markers
+### Task 2: Reorganize datasets by intent + boundary with `tier` + smoke
 
 **Files:**
-- Modify: `evaluation/datasets/software_engineering/classification.yaml`
-- Modify: `evaluation/datasets/software_engineering/routing.yaml`
-- Modify: `evaluation/datasets/software_engineering/direct.yaml`
-- Modify: `evaluation/datasets/software_engineering/teaching.yaml`
-- Modify: `evaluation/datasets/software_engineering/debugging.yaml`
-- Modify: `evaluation/datasets/software_engineering/analysis.yaml`
-- Modify: `evaluation/datasets/software_engineering/code_snippet.yaml`
-- Modify: `evaluation/datasets/software_engineering/orchestration.yaml`
+- Delete: `evaluation/datasets/software_engineering/classification.yaml`
+- Delete: `evaluation/datasets/software_engineering/routing.yaml`
+- Delete: `evaluation/datasets/software_engineering/direct.yaml`
+- Delete: `evaluation/datasets/software_engineering/teaching.yaml`
+- Delete: `evaluation/datasets/software_engineering/debugging.yaml`
+- Delete: `evaluation/datasets/software_engineering/analysis.yaml`
+- Delete: `evaluation/datasets/software_engineering/code_snippet.yaml`
+- Delete: `evaluation/datasets/software_engineering/orchestration.yaml`
+- Create: `evaluation/datasets/software_engineering/boundary.yaml`
+- Create: `evaluation/datasets/software_engineering/faq.yaml`
+- Create: `evaluation/datasets/software_engineering/concept_explain.yaml`
+- Create: `evaluation/datasets/software_engineering/tutorial.yaml`
+- Create: `evaluation/datasets/software_engineering/learning_guide.yaml`
+- Create: `evaluation/datasets/software_engineering/summarization.yaml`
+- Create: `evaluation/datasets/software_engineering/troubleshooting.yaml`
+- Create: `evaluation/datasets/software_engineering/performance_analysis.yaml`
+- Create: `evaluation/datasets/software_engineering/architecture_design.yaml`
+- Create: `evaluation/datasets/software_engineering/comparison.yaml`
+- Create: `evaluation/datasets/software_engineering/code_review.yaml`
+- Create: `evaluation/datasets/software_engineering/generate_code.yaml`
 - Test: `tests/unit/test_evaluation_dataset.py` (`test_load_committed_software_engineering_suites`)
 
 **Interfaces:**
 - Consumes: the `TIERS`/`smoke` schema from Task 1.
-- Produces: every case has a valid `tier`; no case has `answer_quality`; exactly 5 cases have `smoke: true` covering all three tiers.
+- Produces: 12 files (11 intent/boundary files) replacing the 8 strategy/stage files; every case has a valid `tier` and no `answer_quality`; exactly 5 cases have `smoke: true` covering all three tiers.
 
-- [ ] **Step 1: Rewrite each dataset file with `tier` (remove `answer_quality`)**
+- [ ] **Step 1: Delete the 8 old files and write the 12 new files**
 
-Per-file tier assignment (case id → tier):
+Files are organized by the question's own intent (or `boundary` for OOD/confusion cases) — never by internal strategy/orchestration concepts. Tier assignment rule: `orchestrate: true` cases → `full_expert`; troubleshooting/performance/architecture/comparison/code_review → `routing`; other intents + OOD → `classification`.
 
-| File | Cases |
-|---|---|
-| `classification.yaml` | se-110, se-120, se-140, se-121, se-122, se-123, se-124, se-125, se-127 → `classification`; se-126, se-128 → `full_expert` |
-| `routing.yaml` | se-050, se-060, se-090 → `routing` |
-| `direct.yaml` | se-001, se-003, se-040 → `classification` |
-| `teaching.yaml` | se-010, se-020, se-030 → `classification` |
-| `debugging.yaml` | se-051, se-053, se-054 → `routing` |
-| `analysis.yaml` | se-062, se-070, se-081, se-082 → `routing` |
-| `code_snippet.yaml` | se-100, se-101, se-103 → `classification` |
-| `orchestration.yaml` | se-052, se-071, se-102 → `full_expert` |
-
-Smoke markers (add `smoke: true` to exactly these): se-110, se-120, se-050, se-052, se-071.
-
-Example — `classification.yaml` becomes (truncated; apply the same pattern to every case, dropping the `answer_quality` line and adding `tier`):
+`boundary.yaml`:
 
 ```yaml
 cases:
@@ -289,76 +288,233 @@ cases:
     smoke: true
     question: "Recommend a good restaurant in Tokyo."
     expected: {domain: other, intent: null, complexity: null, strategy: reject, orchestrate: false}
+```
+
+`faq.yaml`:
+
+```yaml
+cases:
+  - id: se-001
+    tier: classification
+    question: "What does HTTP status code 503 mean?"
+    expected: {domain: software_engineering, intent: faq, complexity: simple, strategy: direct, orchestrate: false}
+  - id: se-003
+    tier: classification
+    question: "What is the time complexity of quicksort in the average case?"
+    expected: {domain: software_engineering, intent: faq, complexity: simple, strategy: direct, orchestrate: false}
   - id: se-120
     tier: classification
     smoke: true
     question: "What is a hash function?"
     expected: {domain: software_engineering, intent: faq, complexity: simple, strategy: direct, orchestrate: false}
-  - id: se-140
+```
+
+`concept_explain.yaml`:
+
+```yaml
+cases:
+  - id: se-010
     tier: classification
-    question: "My service became slow right after deploying the new caching layer. Why might that be?"
-    expected: {domain: software_engineering, intent: troubleshooting, complexity: medium, strategy: debugging, orchestrate: false}
+    question: "What is dependency injection?"
+    expected: {domain: software_engineering, intent: concept_explain, complexity: simple, strategy: teaching, orchestrate: false}
+    reference: "Dependency injection is a technique where a component receives its dependencies from outside rather than constructing them itself, improving testability and decoupling."
   - id: se-121
     tier: classification
     question: "Why does dependency injection reduce coupling?"
     expected: {domain: software_engineering, intent: concept_explain, complexity: medium, strategy: teaching, orchestrate: false}
-  - id: se-122
-    tier: classification
-    question: "Walk me through setting up a React project step by step."
-    expected: {domain: software_engineering, intent: tutorial, complexity: medium, strategy: teaching, orchestrate: false}
-  - id: se-123
-    tier: classification
-    question: "Create a month-long learning path to go from zero to competent in Python."
-    expected: {domain: software_engineering, intent: learning_guide, complexity: medium, strategy: teaching, orchestrate: false}
-  - id: se-124
-    tier: classification
-    question: "Analyze why my API response time degrades as concurrent users increase, and identify the bottleneck."
-    expected: {domain: software_engineering, intent: performance_analysis, complexity: medium, strategy: analysis, orchestrate: false}
-  - id: se-125
-    tier: classification
-    question: "Compare gRPC vs REST for microservices."
-    expected: {domain: software_engineering, intent: comparison, complexity: medium, strategy: analysis, orchestrate: false}
-  - id: se-126
-    tier: full_expert
-    question: "Design the architecture of a system that must handle millions of events per second."
-    expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: analysis, orchestrate: true}
   - id: se-127
     tier: classification
     question: "Walk me through the 12-factor app principles, one by one, in full detail."
     expected: {domain: software_engineering, intent: concept_explain, complexity: simple, strategy: teaching, orchestrate: false}
+```
+
+`tutorial.yaml`:
+
+```yaml
+cases:
+  - id: se-020
+    tier: classification
+    question: "Teach me step by step how to build a REST API with FastAPI and connect it to PostgreSQL."
+    expected: {domain: software_engineering, intent: tutorial, complexity: medium, strategy: teaching, orchestrate: false}
+  - id: se-122
+    tier: classification
+    question: "Walk me through setting up a React project step by step."
+    expected: {domain: software_engineering, intent: tutorial, complexity: medium, strategy: teaching, orchestrate: false}
+```
+
+`learning_guide.yaml`:
+
+```yaml
+cases:
+  - id: se-030
+    tier: classification
+    question: "Create a structured learning path to go from Python basics to backend web development."
+    expected: {domain: software_engineering, intent: learning_guide, complexity: medium, strategy: teaching, orchestrate: false}
+  - id: se-123
+    tier: classification
+    question: "Create a month-long learning path to go from zero to competent in Python."
+    expected: {domain: software_engineering, intent: learning_guide, complexity: medium, strategy: teaching, orchestrate: false}
+```
+
+`summarization.yaml`:
+
+```yaml
+cases:
+  - id: se-040
+    tier: classification
+    question: "Summarize the key ideas of this article into three bullet points: <article>Effective debugging requires reproducing the failure deterministically, isolating the smallest failing input, and forming hypotheses that you can test rather than guessing at fixes.</article>"
+    expected: {domain: software_engineering, intent: summarization, complexity: simple, strategy: direct, orchestrate: false}
+```
+
+`troubleshooting.yaml`:
+
+```yaml
+cases:
+  - id: se-050
+    tier: routing
+    smoke: true
+    question: "My database connection pool is exhausted under load and new requests hang. How do I diagnose it?"
+    expected: {domain: software_engineering, intent: troubleshooting, complexity: medium, strategy: debugging, orchestrate: false}
+  - id: se-051
+    tier: routing
+    question: "Why does my C++ program crash with a segmentation fault when accessing index 0 of an empty vector?"
+    expected: {domain: software_engineering, intent: troubleshooting, complexity: simple, strategy: debugging, orchestrate: false}
+  - id: se-052
+    tier: full_expert
+    smoke: true
+    question: "A distributed system fails intermittently with timeout errors across several services. Investigate the root cause and propose a fix."
+    expected: {domain: software_engineering, intent: troubleshooting, complexity: complex, strategy: debugging, orchestrate: true}
+  - id: se-053
+    tier: routing
+    question: "My Node.js app crashes with an out-of-memory error only in production. How should I debug this?"
+    expected: {domain: software_engineering, intent: troubleshooting, complexity: medium, strategy: debugging, orchestrate: false}
+  - id: se-054
+    tier: routing
+    question: "My service returns 500 errors sporadically in production, but I have no logs or stack traces yet. What is the root cause?"
+    expected: {domain: software_engineering, intent: troubleshooting, complexity: medium, strategy: debugging, orchestrate: false}
+  - id: se-140
+    tier: routing
+    question: "My service became slow right after deploying the new caching layer. Why might that be?"
+    expected: {domain: software_engineering, intent: troubleshooting, complexity: medium, strategy: debugging, orchestrate: false}
+```
+
+`performance_analysis.yaml`:
+
+```yaml
+cases:
+  - id: se-060
+    tier: routing
+    question: "Analyze why my API response time degrades as concurrent users increase, and identify the bottleneck."
+    expected: {domain: software_engineering, intent: performance_analysis, complexity: medium, strategy: analysis, orchestrate: false}
+  - id: se-062
+    tier: routing
+    question: "Why is a bulk INSERT of 10 million rows slower than expected, and how can it be tuned?"
+    expected: {domain: software_engineering, intent: performance_analysis, complexity: medium, strategy: analysis, orchestrate: false}
+  - id: se-124
+    tier: routing
+    question: "Analyze why my API response time degrades as concurrent users increase, and identify the bottleneck."
+    expected: {domain: software_engineering, intent: performance_analysis, complexity: medium, strategy: analysis, orchestrate: false}
+```
+
+`architecture_design.yaml`:
+
+```yaml
+cases:
+  - id: se-070
+    tier: routing
+    question: "Design the module structure for a monorepo with several shared packages and clear dependency boundaries."
+    expected: {domain: software_engineering, intent: architecture_design, complexity: medium, strategy: analysis, orchestrate: false}
+  - id: se-071
+    tier: full_expert
+    smoke: true
+    question: "Design a scalable microservices architecture for an e-commerce platform covering orders, payments, and inventory."
+    expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: analysis, orchestrate: true}
+  - id: se-082
+    tier: routing
+    question: "Should a startup migrate from a monolith to microservices now, or stay with the monolith?"
+    expected: {domain: software_engineering, intent: architecture_design, complexity: medium, strategy: analysis, orchestrate: false}
+  - id: se-126
+    tier: full_expert
+    question: "Design the architecture of a system that must handle millions of events per second."
+    expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: analysis, orchestrate: true}
   - id: se-128
     tier: full_expert
     question: "Design a distributed rate limiter for millions of QPS with multi-region deployment."
     expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: analysis, orchestrate: true}
 ```
 
-`orchestration.yaml` becomes:
+`comparison.yaml`:
 
 ```yaml
 cases:
-  - id: se-052
-    tier: full_expert
-    smoke: true
-    question: "A distributed system fails intermittently with timeout errors across several services. Investigate the root cause and propose a fix."
-    expected: {domain: software_engineering, intent: troubleshooting, complexity: complex, strategy: debugging, orchestrate: true}
-  - id: se-071
-    tier: full_expert
-    smoke: true
-    question: "Design a scalable microservices architecture for an e-commerce platform covering orders, payments, and inventory."
-    expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: analysis, orchestrate: true}
+  - id: se-081
+    tier: routing
+    question: "Compare the Go defer statement with C++ RAII for resource management."
+    expected: {domain: software_engineering, intent: comparison, complexity: simple, strategy: analysis, orchestrate: false}
+  - id: se-125
+    tier: routing
+    question: "Compare gRPC vs REST for microservices."
+    expected: {domain: software_engineering, intent: comparison, complexity: medium, strategy: analysis, orchestrate: false}
+```
+
+`code_review.yaml`:
+
+```yaml
+cases:
+  - id: se-090
+    tier: routing
+    question: "Review this Python function for correctness and style: <code>def sum(a, b): return a + b  # never used</code>"
+    expected: {domain: software_engineering, intent: code_review, complexity: simple, strategy: analysis, orchestrate: false}
+```
+
+`generate_code.yaml`:
+
+```yaml
+cases:
+  - id: se-100
+    tier: classification
+    question: "Write a Python function that checks whether a string is a palindrome."
+    expected: {domain: software_engineering, intent: generate_code, complexity: simple, strategy: code_snippet, orchestrate: false}
+  - id: se-101
+    tier: classification
+    question: "Write a Python function that reads a CSV file, validates each row, and returns a summary of invalid rows."
+    expected: {domain: software_engineering, intent: generate_code, complexity: medium, strategy: code_snippet, orchestrate: false}
   - id: se-102
     tier: full_expert
     question: "Build a complete CLI tool in Python with argument parsing, a config file, and unit tests."
     expected: {domain: software_engineering, intent: generate_code, complexity: complex, strategy: code_snippet, orchestrate: true}
+  - id: se-103
+    tier: classification
+    question: "Write a Python function that reads a file, processes each line, writes results to an output file, and closes the file properly even when an error occurs."
+    expected: {domain: software_engineering, intent: generate_code, complexity: medium, strategy: code_snippet, orchestrate: false}
 ```
 
-Apply the same pattern to the remaining files per the table: every case gains `tier: classification|routing` and loses its `answer_quality` line; `routing.yaml` adds `smoke: true` to se-050 only.
+Smoke markers across the 12 files: se-110 (classification), se-120 (classification), se-050 (routing), se-052 (full_expert), se-071 (full_expert) — 5 total, covering all three tiers.
 
-- [ ] **Step 2: Extend the committed-suite test to assert tiers and smoke**
+- [ ] **Step 2: Update the committed-suite test for the new file layout**
 
-In `tests/unit/test_evaluation_dataset.py`, extend `test_load_committed_software_engineering_suites` with:
+In `tests/unit/test_evaluation_dataset.py`, update `test_load_committed_software_engineering_suites`. Replace the exact file-name assertion with intent-file checks and add tier/smoke assertions:
 
 ```python
+    names = [s.name for s in suites]
+    assert "boundary" in names
+    assert {"faq", "concept_explain", "tutorial", "learning_guide", "summarization",
+            "troubleshooting", "performance_analysis", "architecture_design",
+            "comparison", "code_review", "generate_code"} <= set(names)
+    assert all(s.domain == "software_engineering" for s in suites)
+    all_cases = [c for s in suites for c in s.cases]
+    assert len(all_cases) >= 20
+    ids = [c.id for c in all_cases]
+    assert len(ids) == len(set(ids))  # no cross-file duplication
+    intents = {c.expected_intent for c in all_cases}
+    assert {"faq", "concept_explain", "tutorial", "learning_guide", "summarization",
+            "troubleshooting", "performance_analysis", "comparison", "architecture_design",
+            "code_review", "generate_code"} <= intents
+    strategies = {c.expected_strategy for c in all_cases}
+    assert {"direct", "teaching", "debugging", "analysis", "code_snippet"} <= strategies
+    assert {"simple", "medium", "complex"} <= {c.expected_complexity for c in all_cases}
+    assert any(c.expected_orchestrate for c in all_cases)
+    assert any(c.expected_domain == "other" for c in all_cases)
     tiers = {c.id: c.tier for s in suites for c in s.cases}
     assert set(tiers.values()) == {"classification", "routing", "full_expert"}
     smoke = [c for s in suites for c in s.cases if c.smoke]
@@ -369,7 +525,7 @@ In `tests/unit/test_evaluation_dataset.py`, extend `test_load_committed_software
 - [ ] **Step 3: Run the dataset tests to verify the migrated data loads**
 
 Run: `uv run pytest tests/unit/test_evaluation_dataset.py -v`
-Expected: PASS — all cases load with valid tiers; exactly 5 smoke cases spanning three tiers.
+Expected: PASS — 12 files load with valid tiers; exactly 5 smoke cases spanning three tiers; the boundary/complexity/policy assertions still hold (se-127, se-128, se-054, se-082, se-103 are all present).
 
 - [ ] **Step 4: Run the full unit suite**
 
@@ -380,7 +536,7 @@ Expected: PASS (existing tests still pass; answer-quality-related assertions wer
 
 ```bash
 git add evaluation/datasets/software_engineering/ tests/unit/test_evaluation_dataset.py
-git commit -m "chore: migrate evaluation datasets to tier field and smoke markers"
+git commit -m "chore: reorganize datasets by intent and add tier/smoke fields"
 ```
 
 ---
@@ -1043,7 +1199,7 @@ git commit -m "feat: tier-based result schema and report summary with failed cas
 In `tests/unit/test_evaluation_cli.py`, update `_suite_cli_env` YAML to add `tier` (and remove `answer_quality`):
 
 ```python
-    (suite_dir / "direct.yaml").write_text(
+    (suite_dir / "faq.yaml").write_text(
         'cases:\n'
         '  - id: a\n'
         '    question: "q"\n'
@@ -1064,21 +1220,21 @@ In `tests/unit/test_evaluation_cli.py`, update `_suite_cli_env` YAML to add `tie
         '      strategy: direct\n',
         encoding="utf-8",
     )
-    (suite_dir / "teaching.yaml").write_text(
+    (suite_dir / "concept_explain.yaml").write_text(
         'cases:\n'
         '  - id: b\n'
         '    question: "q"\n'
         '    tier: classification\n'
         '    expected:\n'
         '      domain: software_engineering\n'
-        '      intent: faq\n'
+        '      intent: concept_explain\n'
         '      complexity: simple\n'
-        '      strategy: direct\n',
+        '      strategy: teaching\n',
         encoding="utf-8",
     )
 ```
 
-In `test_main_run_prints_summary_and_writes_file`, the `direct.yaml` case gains `tier: classification` and `smoke: true` (drop `answer_quality: false`), and remove `--skip-quality` from the argv list.
+In `test_main_run_prints_summary_and_writes_file`, the `faq.yaml` case gains `tier: classification` and `smoke: true` (drop `answer_quality: false`), and remove `--skip-quality` from the argv list.
 
 Replace `test_main_run_suite_selection`, `test_main_run_max_per_suite`, and `test_main_max_per_suite_lt_1_returns_1` with:
 
@@ -1162,8 +1318,8 @@ def _result_record(domain_accuracy):
             "full_expert": {"n_cases": 0, "classification": {}, "routing": {}, "cost": {}},
         },
         "failed_cases": [],
-        "cases": [{"id": "a", "suite": "direct", "tier": "classification"},
-                  {"id": "b", "suite": "teaching", "tier": "routing"}],
+        "cases": [{"id": "a", "suite": "faq", "tier": "classification"},
+                  {"id": "b", "suite": "concept_explain", "tier": "routing"}],
     }
 ```
 
