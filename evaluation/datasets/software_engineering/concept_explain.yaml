@@ -12,3 +12,16 @@ cases:
     tier: classification
     question: "Walk me through the 12-factor app principles, one by one, in full detail."
     expected: {domain: software_engineering, intent: concept_explain, complexity: simple, strategy: teaching, orchestrate: false}
+  - id: se-001
+    tier: classification
+    question: "What does HTTP status code 503 mean?"
+    expected: {domain: software_engineering, intent: concept_explain, complexity: simple, strategy: teaching, orchestrate: false}
+  - id: se-003
+    tier: classification
+    question: "What is the time complexity of quicksort in the average case?"
+    expected: {domain: software_engineering, intent: concept_explain, complexity: simple, strategy: teaching, orchestrate: false}
+  - id: se-120
+    tier: classification
+    smoke: true
+    question: "What is a hash function?"
+    expected: {domain: software_engineering, intent: concept_explain, complexity: simple, strategy: teaching, orchestrate: false}

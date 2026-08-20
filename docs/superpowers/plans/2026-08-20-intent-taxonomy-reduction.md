@@ -25,19 +25,24 @@
 
 ---
 
-### Task 1: Rewrite `intents.yaml` to the 7 core intents
+### Task 1: Domain config — 7 intents, mapping, orchestration, and 4 strategy prompts
 
 **Files:**
 - Modify: `domain/software_engineering/intents.yaml`
+- Modify: `domain/software_engineering/intent_mapping.yaml`
+- Modify: `domain/software_engineering/orchestration.yaml`
+- Create: `domain/software_engineering/prompts/planning.md`
+- Delete: `domain/software_engineering/prompts/code_snippet.md`
+- Delete: `domain/software_engineering/prompts/debugging.md`
 - Test: `tests/unit/test_config.py`
 
 **Interfaces:**
-- Consumes: nothing new — file is parsed by `agent/domain_config.py:_parse_intents` into `dict[str, IntentDef]`.
-- Produces: exactly 7 `IntentDef` entries with `description`, `positive_examples`, `negative_examples`, `boundaries`; used at runtime by `agent/classification.py` for the classification prompt.
+- Consumes: nothing new — files are parsed by `agent/domain_config.py:load_domain_config`, which validates the full cross-reference set atomically (intents → mapping → prompts → orchestration).
+- Produces: `DomainConfig` with exactly 7 intents, a 7-entry intent→strategy map, orchestration gated to `[architecture_design, troubleshooting, code_task]`, and exactly 4 strategy prompts. These must all land together because `load_domain_config` raises `ConfigError` on any inconsistency (e.g. an orchestration intent that no longer exists, a mapped strategy without a prompt file).
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing tests**
 
-In `tests/unit/test_config.py`, add a test that loads the real committed domain and asserts the intent set (reuse existing `load_domain_config` import):
+In `tests/unit/test_config.py`, add tests that load the real committed domain and assert the intent and strategy sets (reuse existing `load_domain_config` import):
 
 ```python
 from pathlib import Path
@@ -49,16 +54,21 @@ def test_real_domain_has_exactly_seven_intents():
         "concept_explain", "tutorial", "learning_guide", "code_task",
         "troubleshooting", "architecture_design", "comparison",
     }
+
+def test_real_domain_prompts_are_exactly_four_strategies():
+    repo = Path(__file__).resolve().parents[2]
+    domain = load_domain_config(str(repo / "domain" / "software_engineering"))
+    assert set(domain.strategies) == {"direct", "teaching", "analysis", "planning"}
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest tests/unit/test_config.py::test_real_domain_has_exactly_seven_intents -v`
-Expected: FAIL — the real domain currently has 11 intents.
+Run: `uv run pytest tests/unit/test_config.py::test_real_domain_has_exactly_seven_intents tests/unit/test_config.py::test_real_domain_prompts_are_exactly_four_strategies -v`
+Expected: FAIL — the real domain currently has 11 intents, 5 prompts.
 
 - [ ] **Step 3: Rewrite `intents.yaml`**
 
-Replace the entire file with:
+Replace the entire file with exactly the 7 intents below (`concept_explain`, `tutorial`, `learning_guide`, `code_task`, `troubleshooting`, `architecture_design`, `comparison`):
 
 ```yaml
 - id: concept_explain
@@ -147,32 +157,7 @@ Replace the entire file with:
     - "Use comparison when the user contrasts two or more alternatives; use architecture_design when the user asks to design a system."
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
-
-Run: `uv run pytest tests/unit/test_config.py::test_real_domain_has_exactly_seven_intents -v`
-Expected: PASS. Note: the full suite will fail until Tasks 2–3 land (mapping/prompts still reference removed names), which is expected.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add domain/software_engineering/intents.yaml tests/unit/test_config.py
-git commit -m "feat: reduce software_engineering intents to 7 core intents"
-```
-
----
-
-### Task 2: Update `intent_mapping.yaml` + `orchestration.yaml`
-
-**Files:**
-- Modify: `domain/software_engineering/intent_mapping.yaml`
-- Modify: `domain/software_engineering/orchestration.yaml`
-- Test: `tests/unit/test_config.py`
-
-**Interfaces:**
-- Consumes: `intents.yaml` (Task 1) — the 7 surviving intent ids.
-- Produces: `intent_mapping: dict[str, str]` (7 entries) and `OrchestrationPolicy(intents=[architecture_design, troubleshooting, code_task])` used by `agent/router.py:route`.
-
-- [ ] **Step 1: Update `intent_mapping.yaml`**
+- [ ] **Step 4: Update `intent_mapping.yaml`**
 
 Replace the entire file with:
 
@@ -186,7 +171,7 @@ architecture_design: planning
 comparison: analysis
 ```
 
-- [ ] **Step 2: Update `orchestration.yaml`**
+- [ ] **Step 5: Update `orchestration.yaml`**
 
 Replace the entire file with:
 
@@ -204,52 +189,9 @@ evaluator:
   max_rounds: 1
 ```
 
-- [ ] **Step 3: Verify domain still loads**
+- [ ] **Step 6: Create `planning.md`, delete `code_snippet.md` + `debugging.md`**
 
-Run: `uv run python -c "from agent.domain_config import load_domain_config; d = load_domain_config('domain/software_engineering'); print(d.intent_mapping); print(d.orchestration.intents)"`
-
-Note: this will fail with "references unknown strategy" until Task 3 creates `planning.md` and deletes the stale prompts. Expected failure now.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add domain/software_engineering/intent_mapping.yaml domain/software_engineering/orchestration.yaml
-git commit -m "feat: remap intents to strategies, narrow orchestration gate"
-```
-
----
-
-### Task 3: Strategy prompts — add `planning.md`, delete `code_snippet.md` + `debugging.md`
-
-**Files:**
-- Create: `domain/software_engineering/prompts/planning.md`
-- Delete: `domain/software_engineering/prompts/code_snippet.md`
-- Delete: `domain/software_engineering/prompts/debugging.md`
-- Test: `tests/unit/test_config.py`
-
-**Interfaces:**
-- Consumes: `intent_mapping.yaml` (Task 2) — the four surviving strategy ids.
-- Produces: `domain.prompts` dict with exactly the four keys `direct`, `teaching`, `analysis`, `planning`. `agent/domain_config.py:_parse_prompts` reads every `*.md` in `prompts/`; `load_domain_config` validates every mapped strategy has a prompt file.
-
-- [ ] **Step 1: Write the failing test**
-
-In `tests/unit/test_config.py`, add a test asserting the strategy prompt set:
-
-```python
-def test_real_domain_prompts_are_exactly_four_strategies():
-    repo = Path(__file__).resolve().parents[2]
-    domain = load_domain_config(str(repo / "domain" / "software_engineering"))
-    assert set(domain.strategies) == {"direct", "teaching", "analysis", "planning"}
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `uv run pytest tests/unit/test_config.py::test_real_domain_prompts_are_exactly_four_strategies -v`
-Expected: FAIL — the real domain currently has 5 prompts: analysis, code_snippet, debugging, direct, teaching.
-
-- [ ] **Step 3: Create `planning.md`**
-
-Create `domain/software_engineering/prompts/planning.md`, adapting the structure/voice of the existing prompts (`direct.md`, `teaching.md`, `analysis.md`). It must adapt its output structure to the intent (learning_guide vs architecture_design). Recommended content:
+Create `domain/software_engineering/prompts/planning.md`, adapting the structure/voice of the existing prompts (`direct.md`, `teaching.md`, `analysis.md`). It must adapt its output structure to the intent (learning_guide vs architecture_design):
 
 ```markdown
 # Planning Strategy
@@ -268,32 +210,30 @@ architectures, and step-by-step designs rather than executing the work directly.
 - Do not write full production code unless explicitly required; keep examples minimal and illustrative.
 ```
 
-- [ ] **Step 4: Delete `code_snippet.md` and `debugging.md`**
-
 ```bash
 git rm domain/software_engineering/prompts/code_snippet.md domain/software_engineering/prompts/debugging.md
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [ ] **Step 7: Run the two tests to verify they pass**
 
-Run: `uv run pytest tests/unit/test_config.py::test_real_domain_prompts_are_exactly_four_strategies -v`
-Expected: PASS.
+Run: `uv run pytest tests/unit/test_config.py::test_real_domain_has_exactly_seven_intents tests/unit/test_config.py::test_real_domain_prompts_are_exactly_four_strategies -v`
+Expected: both PASS.
 
-- [ ] **Step 6: Verify the full domain loads cleanly**
+- [ ] **Step 8: Verify the full domain loads cleanly**
 
 Run: `uv run python -c "from agent.domain_config import load_domain_config; d = load_domain_config('domain/software_engineering'); print('ok', d.intent_mapping, d.orchestration.intents)"`
 Expected: prints `ok` plus the 7-entry mapping and `['architecture_design', 'troubleshooting', 'code_task']`.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add domain/software_engineering/prompts/planning.md
-git commit -m "feat: add planning strategy prompt, drop code_snippet and debugging prompts"
+git add domain/software_engineering/intents.yaml domain/software_engineering/intent_mapping.yaml domain/software_engineering/orchestration.yaml domain/software_engineering/prompts/planning.md tests/unit/test_config.py
+git commit -m "feat: reduce software_engineering to 7 intents and 4 strategy prompts"
 ```
 
 ---
 
-### Task 4: Delete 5 dataset files, create `code_task.yaml`
+### Task 2: Delete 5 dataset files, create `code_task.yaml`
 
 **Files:**
 - Delete: `evaluation/datasets/software_engineering/faq.yaml`
@@ -377,7 +317,7 @@ git commit -m "feat: reorganize dataset to 7 intent files, add code_task.yaml"
 
 ---
 
-### Task 5: Migrate `faq` cases into `concept_explain.yaml`
+### Task 3: Migrate `faq` cases into `concept_explain.yaml`
 
 **Files:**
 - Modify: `evaluation/datasets/software_engineering/concept_explain.yaml`
@@ -437,7 +377,7 @@ git commit -m "feat: migrate faq cases to concept_explain"
 
 ---
 
-### Task 6: Migrate `performance_analysis` cases into `troubleshooting.yaml`
+### Task 4: Migrate `performance_analysis` cases into `troubleshooting.yaml`
 
 **Files:**
 - Modify: `evaluation/datasets/software_engineering/troubleshooting.yaml`
@@ -495,7 +435,7 @@ git commit -m "feat: migrate performance_analysis cases to troubleshooting"
 
 ---
 
-### Task 7: Update strategy fields in surviving files
+### Task 5: Update strategy fields in surviving files
 
 **Files:**
 - Modify: `evaluation/datasets/software_engineering/learning_guide.yaml`
@@ -550,7 +490,7 @@ git commit -m "feat: update surviving cases to the 4-strategy set"
 
 ---
 
-### Task 8: Add boundary cases to `boundary.yaml`
+### Task 6: Add boundary cases to `boundary.yaml`
 
 **Files:**
 - Modify: `evaluation/datasets/software_engineering/boundary.yaml`
@@ -569,7 +509,7 @@ def test_boundary_cases_cover_four_minimal_pairs():
     by_id = {c.id: c for c in boundary.cases}
     assert by_id["se-110"].expected_strategy == "reject"
     assert by_id["se-110"].tier == "classification"
-    assert {c.expected_intent for c in boundary.cases} == {
+    assert {c.expected_intent for c in boundary.cases if c.expected_intent is not None} == {
         "concept_explain", "tutorial", "code_task", "troubleshooting", "architecture_design",
     }
     assert all(c.tier == "classification" for c in boundary.cases)
@@ -586,11 +526,11 @@ Append minimal-pair cases to `boundary.yaml` (one representative per side of eac
 ```yaml
   - id: se-200
     tier: classification
-    question: "How do I use dependency injection in a Go application?"
-    expected: {domain: software_engineering, intent: tutorial, complexity: medium, strategy: teaching, orchestrate: false}
+    question: "What is dependency injection?"
+    expected: {domain: software_engineering, intent: concept_explain, complexity: simple, strategy: teaching, orchestrate: false}
   - id: se-201
     tier: classification
-    question: "Show me step by step how to add dependency injection to my Go service."
+    question: "How do I use dependency injection in a Go application?"
     expected: {domain: software_engineering, intent: tutorial, complexity: medium, strategy: teaching, orchestrate: false}
   - id: se-202
     tier: classification
@@ -618,7 +558,7 @@ Append minimal-pair cases to `boundary.yaml` (one representative per side of eac
     expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: planning, orchestrate: false}
 ```
 
-Note: `se-200`/`se-201` cover pair A (concept_explain↔tutorial with the concept side being the existing se-010/se-121 family), `se-202`/`se-203` pair B, `se-204`/`se-205` pair C, `se-206`/`se-207` pair D. Adjust ids if any collide with cases added in other tasks.
+`se-200`/`se-201` cover pair A (concept_explain↔tutorial), `se-202`/`se-203` pair B, `se-204`/`se-205` pair C, `se-206`/`se-207` pair D. Adjust ids if any collide with cases added in other tasks.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -634,7 +574,7 @@ git commit -m "feat: add boundary minimal-pair cases for the 7-intent taxonomy"
 
 ---
 
-### Task 9: Update `test_evaluation_dataset.py` committed-suite assertions
+### Task 7: Update `test_evaluation_dataset.py` committed-suite assertions
 
 **Files:**
 - Modify: `tests/unit/test_evaluation_dataset.py`
@@ -709,7 +649,7 @@ git commit -m "test: update evaluation dataset assertions for the new taxonomy"
 
 ---
 
-### Task 10: Update `tests/live/test_smoke.py` fixture
+### Task 8: Update `tests/live/test_smoke.py` fixture
 
 **Files:**
 - Modify: `tests/live/test_smoke.py`
@@ -742,7 +682,7 @@ git commit -m "test: update smoke test fixture for the new taxonomy"
 
 ---
 
-### Task 11: Final verification — full test suite + dataset validation
+### Task 9: Final verification — full test suite + dataset validation
 
 **Files:** none (verification only)
 

@@ -4,3 +4,35 @@ cases:
     smoke: true
     question: "Recommend a good restaurant in Tokyo."
     expected: {domain: other, intent: null, complexity: null, strategy: reject, orchestrate: false}
+  - id: se-200
+    tier: classification
+    question: "What is dependency injection?"
+    expected: {domain: software_engineering, intent: concept_explain, complexity: simple, strategy: teaching, orchestrate: false}
+  - id: se-201
+    tier: classification
+    question: "How do I use dependency injection in a Go application?"
+    expected: {domain: software_engineering, intent: tutorial, complexity: medium, strategy: teaching, orchestrate: false}
+  - id: se-202
+    tier: classification
+    question: "Explain what this Go function does."
+    expected: {domain: software_engineering, intent: code_task, complexity: simple, strategy: direct, orchestrate: false}
+  - id: se-203
+    tier: classification
+    question: "My Go service crashes after several hours. Find the cause."
+    expected: {domain: software_engineering, intent: troubleshooting, complexity: medium, strategy: analysis, orchestrate: false}
+  - id: se-204
+    tier: classification
+    question: "Teach me step by step how to build a REST API."
+    expected: {domain: software_engineering, intent: tutorial, complexity: medium, strategy: teaching, orchestrate: false}
+  - id: se-205
+    tier: classification
+    question: "Implement a REST API for me."
+    expected: {domain: software_engineering, intent: code_task, complexity: medium, strategy: direct, orchestrate: false}
+  - id: se-206
+    tier: classification
+    question: "My service cannot handle 10K concurrent users. Find the bottleneck."
+    expected: {domain: software_engineering, intent: troubleshooting, complexity: medium, strategy: analysis, orchestrate: false}
+  - id: se-207
+    tier: classification
+    question: "Design a service that can handle 10K concurrent users."
+    expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: planning, orchestrate: false}

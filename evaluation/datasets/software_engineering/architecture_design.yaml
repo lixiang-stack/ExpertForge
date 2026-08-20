@@ -2,21 +2,21 @@ cases:
   - id: se-070
     tier: routing
     question: "Design the module structure for a monorepo with several shared packages and clear dependency boundaries."
-    expected: {domain: software_engineering, intent: architecture_design, complexity: medium, strategy: analysis, orchestrate: false}
+    expected: {domain: software_engineering, intent: architecture_design, complexity: medium, strategy: planning, orchestrate: false}
   - id: se-071
     tier: full_expert
     smoke: true
     question: "Design a scalable microservices architecture for an e-commerce platform covering orders, payments, and inventory."
-    expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: analysis, orchestrate: true}
+    expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: planning, orchestrate: true}
   - id: se-082
     tier: routing
     question: "Should a startup migrate from a monolith to microservices now, or stay with the monolith?"
-    expected: {domain: software_engineering, intent: architecture_design, complexity: medium, strategy: analysis, orchestrate: false}
+    expected: {domain: software_engineering, intent: architecture_design, complexity: medium, strategy: planning, orchestrate: false}
   - id: se-126
     tier: full_expert
     question: "Design the architecture of a system that must handle millions of events per second."
-    expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: analysis, orchestrate: true}
+    expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: planning, orchestrate: true}
   - id: se-128
     tier: full_expert
     question: "Design a distributed rate limiter for millions of QPS with multi-region deployment."
-    expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: analysis, orchestrate: true}
+    expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: planning, orchestrate: true}

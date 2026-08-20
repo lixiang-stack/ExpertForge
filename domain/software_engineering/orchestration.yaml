@@ -2,9 +2,8 @@ enabled: true
 min_complexity: complex
 intents:
   - architecture_design
-  - performance_analysis
   - troubleshooting
-  - code_review
+  - code_task
 max_workers: 4
 evaluator:
   enabled: true
