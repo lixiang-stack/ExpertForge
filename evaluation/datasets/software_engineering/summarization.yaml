@@ -1,0 +1,5 @@
+cases:
+  - id: se-040
+    tier: classification
+    question: "Summarize the key ideas of this article into three bullet points: <article>Effective debugging requires reproducing the failure deterministically, isolating the smallest failing input, and forming hypotheses that you can test rather than guessing at fixes.</article>"
+    expected: {domain: software_engineering, intent: summarization, complexity: simple, strategy: direct, orchestrate: false}

@@ -1,0 +1,9 @@
+cases:
+  - id: se-020
+    tier: classification
+    question: "Teach me step by step how to build a REST API with FastAPI and connect it to PostgreSQL."
+    expected: {domain: software_engineering, intent: tutorial, complexity: medium, strategy: teaching, orchestrate: false}
+  - id: se-122
+    tier: classification
+    question: "Walk me through setting up a React project step by step."
+    expected: {domain: software_engineering, intent: tutorial, complexity: medium, strategy: teaching, orchestrate: false}

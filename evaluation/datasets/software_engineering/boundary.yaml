@@ -1,0 +1,6 @@
+cases:
+  - id: se-110
+    tier: classification
+    smoke: true
+    question: "Recommend a good restaurant in Tokyo."
+    expected: {domain: other, intent: null, complexity: null, strategy: reject, orchestrate: false}

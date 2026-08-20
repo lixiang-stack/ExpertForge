@@ -1,13 +1,17 @@
 cases:
   - id: se-100
+    tier: classification
     question: "Write a Python function that checks whether a string is a palindrome."
     expected: {domain: software_engineering, intent: generate_code, complexity: simple, strategy: code_snippet, orchestrate: false}
-    answer_quality: true
   - id: se-101
+    tier: classification
     question: "Write a Python function that reads a CSV file, validates each row, and returns a summary of invalid rows."
     expected: {domain: software_engineering, intent: generate_code, complexity: medium, strategy: code_snippet, orchestrate: false}
-    answer_quality: true
+  - id: se-102
+    tier: full_expert
+    question: "Build a complete CLI tool in Python with argument parsing, a config file, and unit tests."
+    expected: {domain: software_engineering, intent: generate_code, complexity: complex, strategy: code_snippet, orchestrate: true}
   - id: se-103
+    tier: classification
     question: "Write a Python function that reads a file, processes each line, writes results to an output file, and closes the file properly even when an error occurs."
     expected: {domain: software_engineering, intent: generate_code, complexity: medium, strategy: code_snippet, orchestrate: false}
-    answer_quality: true

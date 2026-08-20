@@ -10,7 +10,7 @@ from agent.loggers import get_logger
 from agent.model_router import resolve_model
 from agent.router import Router
 
-from .dataset import EvalCase, Suite
+from .dataset import EvalCase, FULL_EXPERT, Suite
 from .judge import Judge
 
 logger = get_logger("evaluation")
@@ -60,6 +60,7 @@ class CaseResult:
     expected_model: str | None
     scorecard: dict | None
     suite: str = ""
+    tier: str = ""
     llm_calls: int = 0
     in_tokens: int = 0
     out_tokens: int = 0
@@ -86,8 +87,6 @@ def run_evaluation(
     suite: Suite,
     client: LLMClient,
     judge_client: LLMClient | None = None,
-    *,
-    skip_quality: bool = False,
 ) -> list[CaseResult]:
     """Run every dataset case through the real pipeline and record per-case results.
 
@@ -95,10 +94,10 @@ def run_evaluation(
       1. Reset the recorder so each case's costs are isolated.
       2. Build a fresh ``Chat`` (no history leaks between cases).
       3. ``Router.route`` -- classification + strategy selection. This is always
-         the first LLM call of the case, even when quality scoring is skipped.
+         the first LLM call of the case.
       4. ``resolve_model`` -- the *expected* model for this route, the
          ground-truth comparison target.
-      5. Quality phase (only if ``case.answer_quality`` and not ``skip_quality``):
+      5. Quality phase (only if ``case.tier == "full_expert"``):
          ``chat.respond`` runs the full pipeline, then the judge scores it.
       6. Aggregate all recorded calls; append a ``CaseResult``.
 
@@ -110,8 +109,8 @@ def run_evaluation(
       - When ``judge_client`` is given, the judge's calls are recorded on a
         separate recorder (``judge_recorder``) but still summed into the same
         per-case totals.
-      - ``skip_quality`` still runs the router, so it does not reduce the case
-        to zero LLM calls.
+      - The router's classification call is always made; the answer-pipeline
+        and judge calls happen only for ``full_expert`` tier cases.
     """
     recorder = RecordingClient(client)
     judge_recorder = RecordingClient(judge_client) if judge_client is not None else None
@@ -133,7 +132,7 @@ def run_evaluation(
             chat = Chat(recorder, config, domain)  # fresh history per case
             route = router.route(case.question)
             expected_model = resolve_model(config, route, config.model)
-            if case.answer_quality and not skip_quality:
+            if case.tier == FULL_EXPERT:
                 resp = chat.respond(case.question, route=route)
                 answer = resp.text
                 # actual_model is captured from the last recorded LLM call AFTER
@@ -163,6 +162,7 @@ def run_evaluation(
             expected_model=expected_model,
             scorecard=scorecard,
             suite=suite.name,
+            tier=case.tier,
             error=error,
             **costs,
         ))

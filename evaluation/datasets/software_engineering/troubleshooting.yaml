@@ -1,0 +1,27 @@
+cases:
+  - id: se-050
+    tier: routing
+    smoke: true
+    question: "My database connection pool is exhausted under load and new requests hang. How do I diagnose it?"
+    expected: {domain: software_engineering, intent: troubleshooting, complexity: medium, strategy: debugging, orchestrate: false}
+  - id: se-051
+    tier: routing
+    question: "Why does my C++ program crash with a segmentation fault when accessing index 0 of an empty vector?"
+    expected: {domain: software_engineering, intent: troubleshooting, complexity: simple, strategy: debugging, orchestrate: false}
+  - id: se-052
+    tier: full_expert
+    smoke: true
+    question: "A distributed system fails intermittently with timeout errors across several services. Investigate the root cause and propose a fix."
+    expected: {domain: software_engineering, intent: troubleshooting, complexity: complex, strategy: debugging, orchestrate: true}
+  - id: se-053
+    tier: routing
+    question: "My Node.js app crashes with an out-of-memory error only in production. How should I debug this?"
+    expected: {domain: software_engineering, intent: troubleshooting, complexity: medium, strategy: debugging, orchestrate: false}
+  - id: se-054
+    tier: routing
+    question: "My service returns 500 errors sporadically in production, but I have no logs or stack traces yet. What is the root cause?"
+    expected: {domain: software_engineering, intent: troubleshooting, complexity: medium, strategy: debugging, orchestrate: false}
+  - id: se-140
+    tier: routing
+    question: "My service became slow right after deploying the new caching layer. Why might that be?"
+    expected: {domain: software_engineering, intent: troubleshooting, complexity: medium, strategy: debugging, orchestrate: false}

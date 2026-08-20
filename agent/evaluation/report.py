@@ -9,6 +9,7 @@ def _case_record(r) -> dict:
     return {
         "id": r.case.id,
         "suite": r.suite,
+        "tier": r.tier,
         "question": r.case.question,
         "expected_domain": r.case.expected_domain,
         "expected_intent": r.case.expected_intent,
@@ -37,26 +38,28 @@ def _case_record(r) -> dict:
 def serialize_results(
     cases,
     metrics,
-    metrics_by_suite,
+    metrics_by_tier,
     *,
     domain: str,
     label: str,
     model: str,
     judge_model: str | None,
-    skip_quality: bool,
+    tiers: list[str],
+    smoke_only: bool,
     dataset_path: str,
-    suites: list[str],
+    failed_cases: list[dict],
 ) -> dict:
     return {
         "domain": domain,
         "label": label,
         "model": model,
         "judge_model": judge_model,
-        "skip_quality": skip_quality,
+        "smoke_only": smoke_only,
         "dataset": dataset_path,
-        "suites": suites,
+        "tiers": tiers,
         "metrics": metrics,
-        "metrics_by_suite": metrics_by_suite,
+        "metrics_by_tier": metrics_by_tier,
+        "failed_cases": failed_cases,
         "cases": [_case_record(r) for r in cases],
     }
 
@@ -107,13 +110,18 @@ def format_summary(record: dict) -> str:
     routing = m["routing"]
     aq = m["answer_quality"]
     cost = m["cost"]
+    if record.get("smoke_only"):
+        selection = "smoke"
+    else:
+        selection = "tiers: " + ",".join(record.get("tiers", []))
     lines = [
         f"Evaluation run: {record['label']}  (domain={record['domain']}, "
         f"cases={m['n_cases']}, model={record['model']}, "
-        f"judge_model={record['judge_model'] or record['model']})",
+        f"judge_model={record['judge_model'] or record['model']}, selection={selection})",
     ]
-    if m.get("n_failed"):
-        lines.append(f"Failed cases: {m['n_failed']}")
+    failed = record.get("failed_cases") or []
+    if failed:
+        lines.append(f"Failed cases: {len(failed)}")
     lines += [
         "",
         "Classification:",
@@ -133,6 +141,12 @@ def format_summary(record: dict) -> str:
         "",
         "Routing:",
         f"  strategy_accuracy        {_fmt_accuracy(routing['strategy_accuracy'])}",
+    ]
+    if routing.get("per_strategy"):
+        lines.append("  per_strategy:")
+        for sid, acc in routing["per_strategy"].items():
+            lines.append(f"    {sid}: {_fmt_accuracy(acc)}")
+    lines += [
         f"  orchestration_accuracy   {_fmt_accuracy(routing['orchestration_accuracy'])}",
         f"  model_routing_accuracy   {_fmt_accuracy(routing['model_routing_accuracy'])}",
         "",
@@ -146,14 +160,18 @@ def format_summary(record: dict) -> str:
     lines += ["", "Cost / latency (total):", f"  {_fmt_cost(cost)}", "  by_path:"]
     for path, pcost in cost["by_path"].items():
         lines.append(f"    {path}: {_fmt_cost(pcost)}")
-    lines += ["", "Per-suite:"]
-    for sname in record.get("suites", []):
-        sm = record["metrics_by_suite"].get(sname, {})
+    lines += ["", "Per-tier:"]
+    for tname in record.get("tiers", []):
+        tm = record["metrics_by_tier"].get(tname, {})
         lines.append(
-            f"  {sname}: n={sm.get('n_cases', 0)} "
-            f"domain={_fmt_accuracy(sm['classification']['domain_accuracy'])} "
-            f"intent={_fmt_accuracy(sm['classification']['intent_accuracy'])} "
-            f"strategy={_fmt_accuracy(sm['routing']['strategy_accuracy'])} "
-            f"{_fmt_cost(sm.get('cost', {}))}"
+            f"  {tname}: n={tm.get('n_cases', 0)} "
+            f"domain={_fmt_accuracy(tm.get('classification', {}).get('domain_accuracy'))} "
+            f"intent={_fmt_accuracy(tm.get('classification', {}).get('intent_accuracy'))} "
+            f"strategy={_fmt_accuracy(tm.get('routing', {}).get('strategy_accuracy'))} "
+            f"{_fmt_cost(tm.get('cost', {}))}"
         )
+    if failed:
+        lines += ["", "Failed cases:"]
+        for fc in failed:
+            lines.append(f"  {fc['id']} [{fc['tier']}]: " + "; ".join(fc["reasons"]))
     return "\n".join(lines) + "\n"
