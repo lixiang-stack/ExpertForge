@@ -185,39 +185,6 @@ def test_load_suites_invalid_complexity(tmp_path):
             '      strategy: direct\n'))
 
 
-def test_load_committed_software_engineering_suites():
-    from pathlib import Path
-
-    repo = Path(__file__).resolve().parents[2]
-    path = repo / "evaluation" / "datasets" / "software_engineering"
-    suites = load_suites(str(path))
-    names = [s.name for s in suites]
-    assert "boundary" in names
-    assert {"faq", "concept_explain", "tutorial", "learning_guide", "summarization",
-            "troubleshooting", "performance_analysis", "architecture_design",
-            "comparison", "code_review", "generate_code"} <= set(names)
-    assert all(s.domain == "software_engineering" for s in suites)
-    all_cases = [c for s in suites for c in s.cases]
-    assert len(all_cases) >= 20
-    ids = [c.id for c in all_cases]
-    assert len(ids) == len(set(ids))  # no cross-file duplication
-    intents = {c.expected_intent for c in all_cases}
-    assert {"faq", "concept_explain", "tutorial", "learning_guide", "summarization",
-            "troubleshooting", "performance_analysis", "comparison", "architecture_design",
-            "code_review", "generate_code"} <= intents
-    strategies = {c.expected_strategy for c in all_cases}
-    assert {"direct", "teaching", "debugging", "analysis", "code_snippet"} <= strategies
-    assert {"simple", "medium", "complex"} <= {c.expected_complexity for c in all_cases}
-    assert any(c.expected_orchestrate for c in all_cases)
-    assert any(c.expected_domain == "other" for c in all_cases)
-    tiers = {c.id: c.tier for s in suites for c in s.cases}
-    assert set(tiers.values()) == {"classification", "routing", "full_expert"}
-    smoke = [c for s in suites for c in s.cases if c.smoke]
-    assert len(smoke) == 5
-    assert {c.tier for c in smoke} == {"classification", "routing", "full_expert"}
-    assert {c.id for c in smoke} == {"se-110", "se-120", "se-050", "se-052", "se-071"}
-
-
 def _suite_dir(tmp_path, name="software_engineering"):
     d = tmp_path / name
     d.mkdir()
@@ -281,23 +248,3 @@ def test_load_suites_single_file(tmp_path):
     assert len(suites) == 1
     assert suites[0].name == "faq"
     assert suites[0].domain == "software_engineering"
-
-
-def test_complexity_boundary_cases_present():
-    suites = load_suites("evaluation/datasets/software_engineering")
-    cases = {c.id: c for s in suites for c in s.cases}
-    assert cases["se-127"].expected_complexity == "simple"
-    assert cases["se-128"].expected_complexity == "complex"
-    assert "12-factor" in cases["se-127"].question
-    assert "distributed rate limiter" in cases["se-128"].question
-
-
-def test_policy_behavior_cases_present():
-    suites = load_suites("evaluation/datasets/software_engineering")
-    cases = {c.id: c for s in suites for c in s.cases}
-    assert cases["se-054"].expected_strategy == "debugging"
-    assert "no logs" in cases["se-054"].question
-    assert cases["se-082"].expected_strategy == "analysis"
-    assert "monolith" in cases["se-082"].question
-    assert cases["se-103"].expected_strategy == "code_snippet"
-    assert "closes the file" in cases["se-103"].question

@@ -1,11 +1,7 @@
 concept_explain: teaching
 tutorial: teaching
-learning_guide: teaching
-faq: direct
-summarization: direct
-troubleshooting: debugging
+learning_guide: planning
+code_task: direct
+troubleshooting: analysis
+architecture_design: planning
 comparison: analysis
-performance_analysis: analysis
-architecture_design: analysis
-generate_code: code_snippet
-code_review: analysis

@@ -1,0 +1,21 @@
+cases:
+  - id: se-090
+    tier: routing
+    question: "Review this Python function for correctness and style: <code>def sum(a, b): return a + b  # never used</code>"
+    expected: {domain: software_engineering, intent: code_task, complexity: simple, strategy: direct, orchestrate: false}
+  - id: se-100
+    tier: classification
+    question: "Write a Python function that checks whether a string is a palindrome."
+    expected: {domain: software_engineering, intent: code_task, complexity: simple, strategy: direct, orchestrate: false}
+  - id: se-101
+    tier: classification
+    question: "Write a Python function that reads a CSV file, validates each row, and returns a summary of invalid rows."
+    expected: {domain: software_engineering, intent: code_task, complexity: medium, strategy: direct, orchestrate: false}
+  - id: se-102
+    tier: full_expert
+    question: "Build a complete CLI tool in Python with argument parsing, a config file, and unit tests."
+    expected: {domain: software_engineering, intent: code_task, complexity: complex, strategy: direct, orchestrate: true}
+  - id: se-103
+    tier: classification
+    question: "Write a Python function that reads a file, processes each line, writes results to an output file, and closes the file properly even when an error occurs."
+    expected: {domain: software_engineering, intent: code_task, complexity: medium, strategy: direct, orchestrate: false}

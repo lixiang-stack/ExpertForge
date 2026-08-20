@@ -63,9 +63,9 @@ def test_smoke_evaluation_writes_result(live_config, tmp_path, monkeypatch):
         '    smoke: true\n'
         '    expected:\n'
         '      domain: software_engineering\n'
-        '      intent: faq\n'
+        '      intent: concept_explain\n'
         '      complexity: simple\n'
-        '      strategy: direct\n',
+        '      strategy: teaching\n',
         encoding="utf-8",
     )
     results_dir = tmp_path / "results"

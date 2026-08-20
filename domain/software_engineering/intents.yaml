@@ -1,109 +1,84 @@
 - id: concept_explain
-  description: Explain a software engineering concept, mechanism, or design rationale ("why" questions)
+  description: Explain a software engineering concept, mechanism, principle, or factual topic
   positive_examples:
-    - "Why does dependency injection reduce coupling?"
-    - "How does garbage collection work?"
+    - "What is dependency injection?"
+    - "Why does TCP use a three-way handshake?"
+    - "What is the difference between a process and a thread?"
   negative_examples:
-    - "My application crashes with this error."
-    - "What is the syntax for this function?"
+    - "Show me step by step how to build a REST API."
+    - "Give me a roadmap for becoming a Go backend expert."
+    - "Write a Go function that parses this JSON."
   boundaries:
-    - "Prefer concept_explain over faq when the user wants understanding of a mechanism, not a short factual answer."
+    - "Use concept_explain when the primary goal is understanding a concept; code examples included in an explanation do not make it a code_task."
+    - "Prefer tutorial when the user wants step-by-step instructions."
+    - "Prefer code_task when the primary object of the request is concrete source code."
 - id: tutorial
-  description: Walk through a topic step by step so the user can follow along
+  description: Teach the user how to perform a specific task, usually with step-by-step instructions
   positive_examples:
-    - "Walk me through setting up a React project step by step."
-    - "Show me how to write a basic REST endpoint."
+    - "How do I configure Redis persistence?"
+    - "Show me step by step how to build a REST API."
+    - "How do I set up a Go project with MongoDB?"
   negative_examples:
-    - "Create a month-long learning path to go from zero to competent in Python."
-    - "What is a hash function?"
+    - "Implement a REST API for me."
+    - "How should I learn distributed systems?"
   boundaries:
-    - "Prefer tutorial over learning_guide when the user wants to follow concrete steps now, not a long-term plan."
+    - "Prefer tutorial when the user wants to learn how to perform the task; prefer code_task when the user asks you to perform the task directly."
+    - "Prefer learning_guide over tutorial for a long-term roadmap, curriculum, or study plan."
 - id: learning_guide
-  description: Create a structured learning path or study plan
+  description: Provide a structured, longer-term learning path, roadmap, curriculum, or study plan
   positive_examples:
-    - "Create a month-long learning path to go from zero to competent in Python."
-    - "What order should I study databases, networking, and operating systems in?"
+    - "How should I learn distributed systems?"
+    - "Give me a roadmap for becoming a Go backend expert."
+    - "What should I learn before studying Kubernetes?"
   negative_examples:
-    - "Walk me through setting up a React project step by step."
-    - "Why does dependency injection reduce coupling?"
+    - "Show me step by step how to build a REST API."
+    - "Design a distributed rate limiter."
   boundaries:
-    - "Prefer learning_guide over tutorial when the user wants a plan or curriculum over a period of time."
-- id: faq
-  description: Quick factual or definitional question with a short answer
+    - "Use learning_guide for roadmap, learning sequence, curriculum, milestones, prerequisites, or long-term study planning."
+    - "Prefer tutorial for a single step-by-step task."
+- id: code_task
+  description: Perform an operation involving concrete source code (generate, explain, review, modify, refactor, transform, optimize)
   positive_examples:
-    - "What is a hash function?"
-    - "What does HTTP status code 503 mean?"
+    - "Write a Go function that parses this JSON."
+    - "Explain what this function does."
+    - "Review this function for bugs."
+    - "Refactor this code to remove duplication."
   negative_examples:
-    - "Why does dependency injection reduce coupling?"
-    - "Design the architecture of a system that must handle millions of events per second."
+    - "What is dependency injection?"
+    - "My Go service crashes after several hours. Find the cause."
   boundaries:
-    - "Prefer faq over concept_explain when the user only needs a short factual or definitional answer."
-- id: summarization
-  description: Summarize content the user provided
-  positive_examples:
-    - "Summarize the key ideas of this article into three bullet points: <article>...</article>"
-  negative_examples:
-    - "Compare gRPC and REST for microservices."
-    - "Explain how dependency injection works."
-  boundaries:
-    - "Prefer summarization when the user provides content and asks to condense it; do not use it for outside knowledge."
+    - "Use code_task when the primary object of the request is concrete source code; a general concept explanation stays concept_explain even if code examples are included."
+    - "Prefer troubleshooting when the user reports an existing problem and wants the cause diagnosed or fixed."
 - id: troubleshooting
-  description: Diagnose and resolve a specific reported problem
+  description: Diagnose and resolve an existing technical problem, including performance problems
   positive_examples:
-    - "My service became slow right after deploying the new caching layer. Why might that be?"
-    - "My database connection pool is exhausted under load and new requests hang. How do I diagnose it?"
+    - "Why is my MongoDB connection failing?"
+    - "My Go service crashes under load. Find the cause."
+    - "The application has intermittent memory leaks. How can I find the root cause?"
   negative_examples:
-    - "Analyze why API response time degrades as concurrent users increase and identify the bottleneck."
-    - "Why does dependency injection reduce coupling?"
+    - "Design a service that can handle 10K concurrent users."
+    - "Refactor this Go function to remove duplication."
   boundaries:
-    - "Prefer troubleshooting over performance_analysis when the user reports a concrete failure or symptom to fix."
-- id: comparison
-  description: Compare two or more technologies, approaches, or options
-  positive_examples:
-    - "Compare gRPC vs REST for microservices."
-    - "SQL vs NoSQL for an analytics workload?"
-  negative_examples:
-    - "Design the architecture of a system that must handle millions of events per second."
-    - "Why does dependency injection reduce coupling?"
-  boundaries:
-    - "Prefer comparison when the user explicitly contrasts options; prefer architecture_design when the user asks to design a system."
-- id: performance_analysis
-  description: Analyze performance characteristics, bottlenecks, or scaling behavior
-  positive_examples:
-    - "Analyze why API response time degrades as concurrent users increase and identify the bottleneck."
-    - "What is the performance profile of this query at scale?"
-  negative_examples:
-    - "My service became slow right after deploying the new caching layer. Why might that be?"
-    - "Review this Python function for correctness and style."
-  boundaries:
-    - "Prefer performance_analysis over troubleshooting when the user asks to analyze a performance trend or bottleneck, not fix a reported failure."
+    - "Use troubleshooting when an existing system has a problem to diagnose; use architecture_design when the user asks how to design a system to meet a target."
 - id: architecture_design
-  description: Design a system, component, or architecture to meet requirements
+  description: Design or redesign a software system, architecture, component structure, or major technical solution
   positive_examples:
-    - "Design the architecture of a system that must handle millions of events per second."
-    - "How should I structure a multi-tenant SaaS backend?"
+    - "Design a distributed rate limiter."
+    - "How should I architect a multi-region service?"
+    - "How should this monolith be decomposed?"
   negative_examples:
-    - "Compare gRPC vs REST for microservices."
+    - "My service cannot handle 10K concurrent users. Find the bottleneck."
+    - "Compare Kafka vs Pulsar."
+  boundaries:
+    - "Use architecture_design when the primary goal is designing a solution; use troubleshooting when diagnosing an existing failure."
+- id: comparison
+  description: Compare alternatives and understand trade-offs
+  positive_examples:
+    - "Redis vs Memcached?"
+    - "Kafka vs Pulsar?"
+    - "What are the trade-offs between REST and gRPC?"
+  negative_examples:
+    - "Design a message processing system using Pulsar."
     - "What is a hash function?"
   boundaries:
-    - "Prefer architecture_design when the user asks to design or structure a system; prefer comparison when they only contrast options."
-- id: generate_code
-  description: Write code to accomplish a task
-  positive_examples:
-    - "Write a Python function that retries an HTTP request with exponential backoff."
-    - "Generate a SQL query to find duplicate emails."
-  negative_examples:
-    - "Review this Python function for correctness and style."
-    - "Why does dependency injection reduce coupling?"
-  boundaries:
-    - "Prefer generate_code when the user asks for code to be produced; prefer code_review when they provide code and ask for feedback."
-- id: code_review
-  description: Review code the user provided for correctness, style, or improvement
-  positive_examples:
-    - "Review this Python function for correctness and style: <code>def sum(a, b): return a + b</code>"
-    - "What issues do you see in this pull request diff?"
-  negative_examples:
-    - "Write a Python function that retries an HTTP request with exponential backoff."
-    - "What is a hash function?"
-  boundaries:
-    - "Prefer code_review when the user provides code and asks for feedback; prefer generate_code when they ask for new code."
+    - "Use comparison when the user contrasts two or more alternatives; use architecture_design when the user asks to design a system."

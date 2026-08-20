@@ -2,8 +2,8 @@ cases:
   - id: se-030
     tier: classification
     question: "Create a structured learning path to go from Python basics to backend web development."
-    expected: {domain: software_engineering, intent: learning_guide, complexity: medium, strategy: teaching, orchestrate: false}
+    expected: {domain: software_engineering, intent: learning_guide, complexity: medium, strategy: planning, orchestrate: false}
   - id: se-123
     tier: classification
     question: "Create a month-long learning path to go from zero to competent in Python."
-    expected: {domain: software_engineering, intent: learning_guide, complexity: medium, strategy: teaching, orchestrate: false}
+    expected: {domain: software_engineering, intent: learning_guide, complexity: medium, strategy: planning, orchestrate: false}
