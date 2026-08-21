@@ -20,3 +20,7 @@ cases:
     tier: full_expert
     question: "Design a distributed rate limiter for millions of QPS with multi-region deployment."
     expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: planning, orchestrate: true}
+  - id: se-129
+    tier: full_expert
+    question: "设计一个支持千万用户的支付系统，同时考虑一致性、灾备、合规、成本和多区域部署。"
+    expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: planning, orchestrate: true}

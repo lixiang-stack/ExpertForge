@@ -32,8 +32,10 @@ from agent.config import ConfigError, get_api_key, get_judge_api_key, load_confi
 from agent.domain_config import load_domain_config
 from agent.llm import LLMClient
 from agent.loggers import get_logger, setup_logging
+from agent.observability import install
 
-from .dataset import DatasetError, Suite, TIERS, load_suites
+from .compare import run_compare, serialize_compare_result, format_compare_summary
+from .dataset import DatasetError, Suite, TIERS, FULL_EXPERT, load_suites
 from .diff import diff_runs, load_result
 from .metrics import compute_metrics, compute_metrics_by_tier, failed_cases
 from .report import format_summary, serialize_results, slim_record, write_baseline, write_result
@@ -84,6 +86,7 @@ def _cmd_run(args) -> int:
                        timeout=config.timeout,
                        provider=config.provider,
                        capability_overrides=config.provider_capabilities)
+    client, _obs_plugin = install(client, config, domain)
     judge_client = None
     if config.evaluation is not None and config.evaluation.judge is not None:
         try:
@@ -161,6 +164,80 @@ def _cmd_baseline(args) -> int:
     return 0
 
 
+def _cmd_compare(args) -> int:
+    try:
+        config = load_config(args.config)
+        domain = load_domain_config(config.domain_dir)
+        api_key = get_api_key()
+    except ConfigError as e:
+        print(f"Config error: {e}", file=sys.stderr)
+        return 1
+    if config.logging is not None:
+        setup_logging(config.logging)
+    logger = get_logger("evaluation")
+    dataset_path = args.dataset or _default_dataset(config.domain_dir)
+    try:
+        suites = load_suites(dataset_path)
+    except DatasetError as e:
+        print(f"Dataset error: {e}", file=sys.stderr)
+        return 1
+    if not suites:
+        print("No dataset suites found", file=sys.stderr)
+        return 1
+    all_cases = [c for s in suites for c in s.cases]
+    selected = [c for c in all_cases if c.tier == FULL_EXPERT]
+    if args.ids:
+        id_set = set(args.ids)
+        selected = [c for c in selected if c.id in id_set]
+    if not selected:
+        print("No full_expert cases match the selection", file=sys.stderr)
+        return 1
+
+    client = LLMClient(base_url=config.base_url, api_key=api_key, model=config.model,
+                       timeout=config.timeout,
+                       provider=config.provider,
+                       capability_overrides=config.provider_capabilities)
+    client, _obs_plugin = install(client, config, domain)
+    judge_client = None
+    if config.evaluation is not None and config.evaluation.judge is not None:
+        try:
+            judge_caps = config.evaluation.judge.provider_capabilities
+            judge_capability_overrides = (
+                {k: getattr(judge_caps, k) for k in KNOWN_CAPABILITY_KEYS}
+                if judge_caps is not None
+                else config.provider_capabilities
+            )
+            judge_client = LLMClient(
+                base_url=config.evaluation.judge.base_url,
+                api_key=get_judge_api_key(),
+                model=config.evaluation.judge.model,
+                timeout=config.evaluation.judge.timeout,
+                provider=config.evaluation.judge.provider,
+                capability_overrides=judge_capability_overrides,
+            )
+        except ConfigError as e:
+            print(f"Config error: {e}", file=sys.stderr)
+            return 1
+    logger.info("compare start", domain=domain.name, cases=len(selected))
+    results = run_compare(config, domain, selected, client, judge_client=judge_client)
+    logger.info("compare end", domain=domain.name, cases=len(results))
+    judge_name = resolve_judge_model(config)
+    record = serialize_compare_result(
+        results, domain=domain.name, label=args.label,
+        model=config.model, judge_model=judge_name,
+    )
+    results_dir = args.results_dir
+    if results_dir is None:
+        results_dir = "evaluation/results"
+        eval_cfg = getattr(config, "evaluation", None)
+        if eval_cfg is not None:
+            results_dir = eval_cfg.results_dir
+    path = write_result(results_dir, record, label=args.label)
+    print(format_compare_summary(results, args.label, config.model, judge_name))
+    print(f"Result written to: {path}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="agent.evaluation")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -190,6 +267,19 @@ def main(argv: list[str] | None = None) -> int:
     baseline_p.add_argument("--out", default=None,
                             help="output path (default: evaluation/results/baseline.json)")
     baseline_p.set_defaults(func=_cmd_baseline)
+
+    compare_p = sub.add_parser("compare", help="compare baseline vs orchestrated on full_expert cases")
+    compare_p.add_argument("--dataset", default=None,
+                           help="path to dataset directory (or single YAML file)")
+    compare_p.add_argument("--label", default="compare",
+                           help="run label for the result file")
+    compare_p.add_argument("--config", default=None, help="path to agent config.json")
+    compare_p.add_argument("--results-dir", default=None,
+                           help="directory for result JSONs (default: config evaluation.results_dir, "
+                                "else evaluation/results)")
+    compare_p.add_argument("--ids", nargs="+", default=None,
+                           help="filter to specific case IDs (e.g., se-052 se-071)")
+    compare_p.set_defaults(func=_cmd_compare)
 
     args = parser.parse_args(argv)
     return args.func(args)
