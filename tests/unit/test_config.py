@@ -1097,3 +1097,28 @@ def test_load_domain_config_orchestration_bad_evaluator_raises(tmp_path):
     )
     with pytest.raises(ConfigError):
         load_domain_config(str(base))
+
+
+def test_load_domain_config_topology_defaults_to_map_reduce(tmp_path):
+    domain = load_domain_config(_write_domain(tmp_path))
+    assert domain.orchestration.topology == "map_reduce"
+
+
+def test_load_domain_config_topology_critique(tmp_path):
+    base = tmp_path / "domain"
+    _write_domain(tmp_path)
+    (base / "orchestration.yaml").write_text(
+        ORCHESTRATION_YAML + "topology: critique\n", encoding="utf-8"
+    )
+    domain = load_domain_config(str(base))
+    assert domain.orchestration.topology == "critique"
+
+
+def test_load_domain_config_topology_invalid_raises(tmp_path):
+    base = tmp_path / "domain"
+    _write_domain(tmp_path)
+    (base / "orchestration.yaml").write_text(
+        ORCHESTRATION_YAML + "topology: bogus\n", encoding="utf-8"
+    )
+    with pytest.raises(ConfigError):
+        load_domain_config(str(base))

@@ -1,6 +1,6 @@
 """Non-invasive observability injection (AOP-style monkey-patching).
 
-What it does: `apply()` wraps ten business methods in place
+What it does: `apply()` wraps fourteen business methods in place
 (Chat.respond, ClassificationService.classify, ...) with tracing wrappers
 that record trace_start / decision / trace_end events and open the
 trace_span / phase contexts -- WITHOUT touching any business code.
@@ -54,6 +54,10 @@ DEFAULT_PHASES: dict[str, str] = {
     "Orchestrator._direct_answer": "orchestration.direct",
     "Orchestrator._evaluate": "orchestration.evaluator",
     "Orchestrator._reaggregate": "orchestration.optimizer",
+    "Orchestrator._draft": "orchestration.draft",
+    "Orchestrator._plan_perspectives": "orchestration.planner",
+    "Orchestrator._critic": "orchestration.critic",
+    "Orchestrator._revise": "orchestration.reviser",
 }
 
 # The active Installed (or None). Wrappers become transparent passthroughs when
@@ -103,6 +107,10 @@ class Installed:
             "Orchestrator._direct_answer": self._wrap_direct,
             "Orchestrator._evaluate": self._wrap_evaluate,
             "Orchestrator._reaggregate": self._wrap_reaggregate,
+            "Orchestrator._draft": self._wrap_direct,
+            "Orchestrator._plan_perspectives": self._wrap_plan_perspectives,
+            "Orchestrator._critic": self._wrap_critic,
+            "Orchestrator._revise": self._wrap_revise,
         }
         try:
             original = getattr(target, patch_name)
@@ -289,6 +297,57 @@ class Installed:
                 return original(orch, question, strategy, context, model)  # <-- real business call
         return wrapper
 
+    def _wrap_plan_perspectives(self, original, key):
+        def wrapper(orch, question, strategy, context, model):
+            inst = _current_inst()
+            if inst is None:
+                return original(orch, question, strategy, context, model)  # passthrough: real business call
+            with phase(inst._phase(key)):
+                perspectives = original(orch, question, strategy, context, model)  # <-- real business call
+                tid = current_trace_id()
+                if tid:
+                    data = {"degraded": True} if perspectives is None else {
+                        "tasks": [{"title": t.title, "instruction": t.instruction,
+                                   "role": t.role} for t in perspectives]}
+                    inst._record_decision(tid, inst._phase(key), data)
+                return perspectives
+        return wrapper
+
+    def _wrap_critic(self, original, key):
+        def wrapper(orch, question, perspective, context, draft, model):
+            inst = _current_inst()
+            if inst is None:
+                return original(orch, question, perspective, context, draft, model)  # passthrough: real business call
+            base = inst._phase(key)
+            n = inst._next_worker(current_trace_id() or "")
+            with phase(f"{base}.{n}"):
+                tid = current_trace_id()
+                try:
+                    result = original(orch, question, perspective, context, draft, model)  # <-- real business call
+                except Exception as e:  # noqa: BLE001 - record failure, then re-raise; business decides
+                    if tid:
+                        inst._record_decision(tid, f"{base}.{n}", {
+                            "task": perspective.title, "role": perspective.role, "error": str(e)})
+                    raise
+                if tid:
+                    inst._record_decision(tid, f"{base}.{n}", {
+                        "task": perspective.title, "role": perspective.role})
+                return result
+        return wrapper
+
+    def _wrap_revise(self, original, key):
+        def wrapper(orch, question, strategy, context, draft, issues, model):
+            inst = _current_inst()
+            if inst is None:
+                return original(orch, question, strategy, context, draft, issues, model)  # passthrough: real business call
+            with phase(inst._phase(key)):
+                answer = original(orch, question, strategy, context, draft, issues, model)  # <-- real business call
+                tid = current_trace_id()
+                if tid:
+                    inst._record_decision(tid, inst._phase(key), {"issues": len(issues)})
+                return answer
+        return wrapper
+
     def apply(self) -> "Installed":
         global _ACTIVE
         targets = [
@@ -302,6 +361,10 @@ class Installed:
             ("Orchestrator._direct_answer", Orchestrator, "_direct_answer"),
             ("Orchestrator._evaluate", Orchestrator, "_evaluate"),
             ("Orchestrator._reaggregate", Orchestrator, "_reaggregate"),
+            ("Orchestrator._draft", Orchestrator, "_draft"),
+            ("Orchestrator._plan_perspectives", Orchestrator, "_plan_perspectives"),
+            ("Orchestrator._critic", Orchestrator, "_critic"),
+            ("Orchestrator._revise", Orchestrator, "_revise"),
         ]
         for key, cls, method in targets:
             self._wrap(key, cls, method)

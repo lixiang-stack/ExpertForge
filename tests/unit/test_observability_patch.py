@@ -53,6 +53,9 @@ class RaisingInner(FakeInner):
 _CLASSIFY = '{"in_domain": true, "intent": "faq", "complexity": "simple", "reason": "ok"}'
 _CLASSIFY_COMPLEX = '{"in_domain": true, "intent": "troubleshooting", "complexity": "complex", "reason": "ok"}'
 _PLAN = '{"tasks": [{"title": "t1", "instruction": "i1", "role": "R1"}, {"title": "t2", "instruction": "i2", "role": "R2"}]}'
+_CRITIQUE_PLAN = ('{"perspectives": [{"title": "consistency", "focus": "contradictions", "role": "R1"},'
+                  ' {"title": "feasibility", "focus": "operations", "role": "R2"}]}')
+_ISSUES_EMPTY = '{"issues": []}'
 
 
 def _config():
@@ -70,7 +73,7 @@ def _domain():
     )
 
 
-def _domain_complex(evaluator=None):
+def _domain_complex(evaluator=None, topology="map_reduce"):
     return DomainConfig(
         name="sw", description="desc", out_of_domain_reply="Out.",
         intents={
@@ -81,7 +84,7 @@ def _domain_complex(evaluator=None):
         strategies=["direct", "debugging"],
         orchestration=OrchestrationPolicy(
             enabled=True, min_complexity="complex", intents=["troubleshooting"],
-            max_workers=4,
+            max_workers=4, topology=topology,
             evaluator=evaluator or EvaluatorPolicy(enabled=False),
         ),
         prompts={
@@ -160,6 +163,26 @@ def test_install_wraps_orchestration_phases(tmp_path):
     # worker numbering restarts per trace: exactly worker.1 and worker.2
     assert "orchestration.worker.1" in inner.seen_phases
     assert "orchestration.worker.2" in inner.seen_phases
+
+
+def test_install_wraps_critique_phases(tmp_path):
+    store = _store(tmp_path)
+    inner = FakeInner([_CLASSIFY_COMPLEX, "draft answer", _CRITIQUE_PLAN, _ISSUES_EMPTY, _ISSUES_EMPTY])
+    chat = Chat(inner, _config(), _domain_complex(topology="critique"))
+    patch_mod.Installed(store, {}).apply()
+    resp = chat.respond("huge debugging task")
+
+    assert resp.text == "draft answer"
+    assert "orchestration.draft" in inner.seen_phases
+    assert "orchestration.planner" in inner.seen_phases
+    assert "orchestration.critic.1" in inner.seen_phases
+    assert "orchestration.critic.2" in inner.seen_phases
+    events, _ = read_events(tmp_path / "obs")
+    critic_decisions = [
+        e for e in events
+        if e["type"] == "decision" and e["phase"].startswith("orchestration.critic")
+    ]
+    assert {e["data"]["task"] for e in critic_decisions} == {"consistency", "feasibility"}
 
 
 def test_respond_forwards_route_kwarg_under_active_install(tmp_path):
