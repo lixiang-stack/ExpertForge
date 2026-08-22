@@ -34,7 +34,8 @@ class FakeClient:
         self.responses = list(responses)
         self.calls = []
 
-    def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False, json_schema=None):
+    def chat_completion(self, messages, model=None, temperature=0.3, disable_thinking=False,
+                        json_mode=False, json_schema=None):
         self.calls.append((messages, model, disable_thinking, json_mode, json_schema))
         return ChatResult(text=self.responses.pop(0), model=model or "m")
 
@@ -44,12 +45,14 @@ class RaisingClient(FakeClient):
         super().__init__(responses)
         self.raise_on_roles = set(raise_on_roles)
 
-    def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False, json_schema=None):
+    def chat_completion(self, messages, model=None, temperature=0.3, disable_thinking=False,
+                        json_mode=False, json_schema=None):
         sys_content = messages[0]["content"] if messages else ""
         if any(f"Role: {r}" in sys_content for r in self.raise_on_roles):
             self.calls.append((messages, model, disable_thinking, json_mode, json_schema))
             raise LLMError("worker boom")
-        return super().chat_completion(messages, model=model, disable_thinking=disable_thinking,
+        return super().chat_completion(messages, model=model, temperature=temperature,
+                                       disable_thinking=disable_thinking,
                                        json_mode=json_mode, json_schema=json_schema)
 
 
@@ -65,12 +68,14 @@ class CallRaisingClient(FakeClient):
         super().__init__(responses)
         self.raise_on_call = raise_on_call
 
-    def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False, json_schema=None):
+    def chat_completion(self, messages, model=None, temperature=0.3, disable_thinking=False,
+                        json_mode=False, json_schema=None):
         if len(self.calls) == self.raise_on_call:
             self.calls.append((messages, model, disable_thinking, json_mode, json_schema))
             raise LLMError("boom")
         return super().chat_completion(
-            messages, model=model, disable_thinking=disable_thinking,
+            messages, model=model, temperature=temperature,
+            disable_thinking=disable_thinking,
             json_mode=json_mode, json_schema=json_schema,
         )
 
@@ -333,11 +338,13 @@ def _critique_domain(evaluator=None):
 
 
 class CriticFailingClient(FakeClient):
-    def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False, json_schema=None):
+    def chat_completion(self, messages, model=None, temperature=0.3, disable_thinking=False,
+                        json_mode=False, json_schema=None):
         if "You are a reviewer" in messages[0]["content"]:
             self.calls.append((messages, model, disable_thinking, json_mode, json_schema))
             raise LLMError("critic boom")
-        return super().chat_completion(messages, model=model, disable_thinking=disable_thinking,
+        return super().chat_completion(messages, model=model, temperature=temperature,
+                                       disable_thinking=disable_thinking,
                                        json_mode=json_mode, json_schema=json_schema)
 
 

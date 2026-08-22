@@ -13,9 +13,9 @@ class FakeClient:
         self.error = error
         self.calls = []
 
-    def chat_completion(self, messages, model=None, disable_thinking=False,
+    def chat_completion(self, messages, model=None, temperature=0.3, disable_thinking=False,
                         json_mode=False, json_schema=None):
-        self.calls.append((messages, model, disable_thinking, json_mode, json_schema))
+        self.calls.append((messages, model, temperature, disable_thinking, json_mode, json_schema))
         if self.error is not None:
             raise self.error
         return ChatResult(text=self.response, model=model or "m")
@@ -59,13 +59,31 @@ def test_judge_returns_scorecard():
     )
     sc = Judge(client, "judge-a").score("q?", "answer")
     assert sc["correctness"] == 5
-    messages, model, dt, jm, schema = client.calls[0]
+    messages, model, temperature, dt, jm, schema = client.calls[0]
     assert model == "judge-a"
     assert dt is True
     assert jm is True
     assert messages[1]["role"] == "user"
     assert messages[1]["content"] == "q?"
     assert "q?" not in messages[0]["content"]
+
+
+def test_judge_scores_deterministically_by_default():
+    client = FakeClient(
+        '{"correctness": 5, "relevance": 4, "completeness": 4, '
+        '"technical_depth": 5, "practical_usefulness": 4, "hallucination": 5}'
+    )
+    Judge(client, "judge-a").score("q?", "answer")
+    assert client.calls[0][2] == 0.0
+
+
+def test_judge_temperature_configurable():
+    client = FakeClient(
+        '{"correctness": 5, "relevance": 4, "completeness": 4, '
+        '"technical_depth": 5, "practical_usefulness": 4, "hallucination": 5}'
+    )
+    Judge(client, "judge-a", temperature=0.3).score("q?", "answer")
+    assert client.calls[0][2] == 0.3
 
 
 def test_judge_error_returns_none():
