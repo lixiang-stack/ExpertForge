@@ -20,7 +20,7 @@ DOMAIN_FILE_CONTRACT = (
     "A domain directory must contain: 'domain.json' (name, description, "
     "out_of_domain_reply), 'intents.yaml' (list of {id, description, "
     "positive_examples, negative_examples, boundaries}), 'orchestration.yaml' "
-    "(enabled, min_complexity, intents, max_workers, evaluator), "
+    "(enabled, min_complexity, intents, max_workers, topology, evaluator), "
     "'intent_mapping.yaml' (intent id -> strategy id), 'prompts/*.md' (one "
     "file per strategy), optional 'complexity.yaml' (list of simple|medium|"
     "complex levels) and optional 'expert_policy.md'."
@@ -114,6 +114,11 @@ def _parse_orchestration(base: Path, intents: dict[str, IntentDef]) -> Orchestra
     max_workers = orch_data.get("max_workers", 4)
     if not isinstance(max_workers, int) or max_workers <= 0:
         raise ConfigError(f"orchestration.yaml 'max_workers' must be a positive int: {orch_path}")
+    topology = orch_data.get("topology", "map_reduce")
+    if topology not in ("map_reduce", "critique"):
+        raise ConfigError(
+            f"orchestration.yaml 'topology' must be 'map_reduce' or 'critique': {orch_path}"
+        )
     ev = orch_data.get("evaluator") or {}
     if not isinstance(ev, dict):
         raise ConfigError(f"orchestration.yaml 'evaluator' must be a mapping: {orch_path}")
@@ -128,6 +133,7 @@ def _parse_orchestration(base: Path, intents: dict[str, IntentDef]) -> Orchestra
         min_complexity=min_complexity,
         intents=orch_intents,
         max_workers=max_workers,
+        topology=topology,
         evaluator=EvaluatorPolicy(
             enabled=bool(ev.get("enabled", True)),
             min_dimension_score=min_score,

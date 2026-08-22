@@ -5,6 +5,7 @@ intents:
   - troubleshooting
   - code_task
 max_workers: 4
+topology: critique
 evaluator:
   enabled: true
   min_dimension_score: 3

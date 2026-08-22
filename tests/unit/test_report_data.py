@@ -250,3 +250,34 @@ def test_group_stages_unknown_phase_own_stage():
          "latency_ms": 5, "status": "ok", "ts": 1},
     ]))["a"]
     assert [s.title for s in stages] == ["custom.phase"]
+
+
+def test_build_timeline_critic_decision_type():
+    tl = build_timeline([{"type": "decision", "trace_id": "a", "phase": "orchestration.critic.1",
+                          "ts": 1, "data": {"task": "consistency"}}])
+    steps = tl["a"]
+    assert steps[0].kind == "decision"
+    assert steps[0].detail["type"] == "worker"
+    assert steps[0].detail["data"]["task"] == "consistency"
+
+
+def test_group_stages_groups_critics_like_workers():
+    events = [
+        {"type": "trace_start", "trace_id": "a", "phase": "trace", "ts": 1},
+        {"type": "llm_call", "trace_id": "a", "phase": "orchestration.draft", "model": "m",
+         "prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15,
+         "latency_ms": 100, "status": "ok", "ts": 10},
+        {"type": "decision", "trace_id": "a", "phase": "orchestration.critic.1", "ts": 20,
+         "data": {"task": "consistency", "role": "R1"}},
+        {"type": "llm_call", "trace_id": "a", "phase": "orchestration.critic.1", "model": "m",
+         "prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3,
+         "latency_ms": 50, "status": "ok", "ts": 30},
+        {"type": "llm_call", "trace_id": "a", "phase": "orchestration.critic.2", "model": "m",
+         "prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3,
+         "latency_ms": 50, "status": "ok", "ts": 40},
+    ]
+    stages = group_stages(build_timeline(events))["a"]
+    assert [s.title for s in stages] == ["orchestration.draft", "orchestration.critic"]
+    critic_stage = stages[1]
+    assert [w.number for w in critic_stage.workers] == [1, 2]
+    assert critic_stage.workers[0].task_title == "consistency"

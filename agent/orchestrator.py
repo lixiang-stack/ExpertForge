@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from .config import AgentConfig, DomainConfig, resolve_judge_model
 from .evaluation.judge import Judge
 from .llm import LLMClient, LLMError
@@ -10,6 +12,13 @@ from .router import RouteResult
 from .worker_pool import WorkerResult, WorkerTask, run_workers
 
 logger = get_logger("orchestrator")
+
+
+@dataclass
+class Issue:
+    severity: str
+    description: str
+    suggestion: str
 
 
 def _planner_schema() -> dict:
@@ -33,6 +42,69 @@ def _planner_schema() -> dict:
     }
 
 
+def _perspectives_schema() -> dict:
+    return {
+        "type": "object",
+        "properties": {
+            "perspectives": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "focus": {"type": "string"},
+                        "role": {"type": "string"},
+                    },
+                    "required": ["title", "focus", "role"],
+                },
+            }
+        },
+        "required": ["perspectives"],
+    }
+
+
+def _issues_schema() -> dict:
+    return {
+        "type": "object",
+        "properties": {
+            "issues": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "severity": {"type": "string"},
+                        "description": {"type": "string"},
+                        "suggestion": {"type": "string"},
+                    },
+                    "required": ["severity", "description", "suggestion"],
+                },
+            }
+        },
+        "required": ["issues"],
+    }
+
+
+def _parse_issues(text: str | None) -> list[Issue]:
+    data = parse_json(text) if text else None
+    if not data or not isinstance(data.get("issues"), list):
+        return []
+    issues: list[Issue] = []
+    for item in data["issues"]:
+        if not isinstance(item, dict):
+            continue
+        description = item.get("description")
+        if not isinstance(description, str) or not description:
+            continue
+        severity = item.get("severity")
+        if not isinstance(severity, str) or not severity:
+            severity = "medium"
+        suggestion = item.get("suggestion")
+        if not isinstance(suggestion, str):
+            suggestion = ""
+        issues.append(Issue(severity=severity, description=description, suggestion=suggestion))
+    return issues
+
+
 _PLANNER_PROMPT = """You are a planning agent for an expert domain named {name}.
 
 {description}
@@ -46,6 +118,47 @@ Rules:
 - Assign each sub-task a distinct analysis role (e.g. Architecture, Scalability,
   Reliability / Failure Modes, Operations) that defines its focused responsibility.
 - Output ONLY a single JSON object: {{"tasks": [{{"title": "...", "instruction": "...", "role": "..."}}]}}
+"""
+
+_PERSPECTIVES_PROMPT = """You are a review planner for an expert domain named {name}.
+
+{description}
+
+Task context:
+{context}
+
+Rules:
+- Plan 2-4 distinct review perspectives for checking a draft expert answer.
+- Each perspective must be verifiable by reading the user's question and the
+  draft alone (e.g. Consistency & Coherence, Feasibility & Operations,
+  Compliance & Security, Cost).
+- Assign each perspective a distinct role name that defines its focused responsibility.
+- Output ONLY a single JSON object: {{"perspectives": [{{"title": "...", "focus": "...", "role": "..."}}]}}
+"""
+
+_CRITIC_SYSTEM_TEMPLATE = """{context}
+
+You are a reviewer. Your review perspective: {role}
+Focus: {instruction}
+
+Review the draft answer to the user's question from this perspective only.
+Report only real defects:
+- Internal contradictions or inconsistent decisions across sections
+- Unsupported claims presented as fact (assumptions must stay flagged as assumptions)
+- Technical errors
+- Missing reasoning where the question demands it
+
+Do NOT rewrite the answer. Output ONLY a single JSON object:
+{{"issues": [{{"severity": "high|medium|low", "description": "...", "suggestion": "..."}}]}}
+If there are no defects, output {{"issues": []}}.
+"""
+
+_REVISE_SYSTEM_TEMPLATE = """{context}
+
+You authored the draft answer below. Reviewers found issues in it. Produce an
+improved final version that resolves every issue while keeping the overall
+structure and all correct content. State important assumptions explicitly;
+never present invented numbers or facts as established requirements.
 """
 
 
@@ -85,10 +198,16 @@ class Orchestrator:
     def run(self, question: str, route: RouteResult, model: str) -> str:
         logger.info("orchestration start", strategy=route.strategy, model=model)
         context = self._strategy_context(route.strategy)
+        policy = self.domain.orchestration
+        topology = policy.topology if policy else "map_reduce"
+        if topology == "critique":
+            return self._run_critique(question, route.strategy, context, model, policy)
+        return self._run_map_reduce(question, route, context, model, policy)
+
+    def _run_map_reduce(self, question: str, route: RouteResult, context: str, model: str, policy) -> str:
         tasks = self._plan(question, route.strategy, context, model)
         if tasks is None:
             return self._direct_answer(question, route.strategy, context, model)
-        policy = self.domain.orchestration
         results = run_workers(
             tasks,
             lambda task: self._worker(question, task, context, model),
@@ -105,15 +224,133 @@ class Orchestrator:
         if not (policy and policy.evaluator.enabled):
             return answer
         return self._evaluate_loop(
-            question, route.strategy, context, results, answer, model, policy.evaluator
+            question, route.strategy, context, answer, model, policy.evaluator,
+            improve=lambda previous, feedback, round_no: self._reaggregate(
+                question, route.strategy, context, results, previous, feedback, round_no, model),
         )
+
+    def _run_critique(self, question: str, strategy: str, context: str, model: str, policy) -> str:
+        draft = self._draft(question, strategy, context, model)
+        perspectives = self._plan_perspectives(question, strategy, context, model)
+        issues: list[Issue] = []
+        if perspectives:
+            results = run_workers(
+                perspectives,
+                lambda p: self._critic(question, p, context, draft, model),
+                max_workers=policy.max_workers if policy else 4,
+            )
+            for r in results:
+                if r.error:
+                    logger.warning(
+                        "critic failure", task=r.task.title, role=r.task.role, error=r.error
+                    )
+            issues = self._consolidate(results)
+        answer = draft
+        if issues:
+            try:
+                answer = self._revise(question, strategy, context, draft, issues, model)
+            except LLMError:
+                logger.warning("revise failure, returning draft")
+                answer = draft
+        if not (policy and policy.evaluator.enabled):
+            return answer
+
+        def improve(previous: str, feedback: list[str], round_no: int) -> str:
+            judge_issues = [
+                Issue(severity="high", description=f"Judge scored too low - {f}", suggestion="")
+                for f in feedback
+            ]
+            return self._revise(question, strategy, context, previous, judge_issues, model)
+
+        return self._evaluate_loop(
+            question, strategy, context, answer, model, policy.evaluator, improve=improve,
+        )
+
+    def _draft(self, question: str, strategy: str, context: str, model: str) -> str:
+        messages = [
+            {"role": "system", "content": context},
+            {"role": "user", "content": question},
+        ]
+        # No disable_thinking: keep the client default so the draft has the
+        # same reasoning budget as the single-call baseline (Strategy.process).
+        return self.client.chat_completion(messages, model=model).text
+
+    def _plan_perspectives(
+        self, question: str, strategy: str, context: str, model: str
+    ) -> list[WorkerTask] | None:
+        prompt = _PERSPECTIVES_PROMPT.format(
+            name=self.domain.name,
+            description=self.domain.description,
+            context=context,
+        )
+        messages = [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": question},
+        ]
+        result = self.client.chat_completion(
+            messages, model=model, disable_thinking=True, json_schema=_perspectives_schema()
+        )
+        data = parse_json(result.text)
+        if not data or not isinstance(data.get("perspectives"), list):
+            return None
+        perspectives: list[WorkerTask] = []
+        for item in data["perspectives"]:
+            if not isinstance(item, dict):
+                return None
+            title = item.get("title")
+            focus = item.get("focus")
+            if not isinstance(title, str) or not isinstance(focus, str):
+                return None
+            role = item.get("role")
+            if not isinstance(role, str) or not role:
+                role = title
+            perspectives.append(WorkerTask(title=title, instruction=focus, role=role))
+        return perspectives or None
+
+    def _critic(self, question: str, perspective: WorkerTask, context: str, draft: str, model: str) -> str:
+        system = _CRITIC_SYSTEM_TEMPLATE.format(
+            context=context, role=perspective.role, instruction=perspective.instruction,
+        )
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": f"User question:\n{question}\n\nDraft answer:\n{draft}"},
+        ]
+        return self.client.chat_completion(
+            messages, model=model, disable_thinking=True, json_schema=_issues_schema()
+        ).text
+
+    def _consolidate(self, results: list[WorkerResult]) -> list[Issue]:
+        issues: list[Issue] = []
+        for r in results:
+            if r.error or r.text is None:
+                continue
+            issues.extend(_parse_issues(r.text))
+        return issues
+
+    def _revise(self, question: str, strategy: str, context: str, draft: str, issues: list[Issue], model: str) -> str:
+        lines = "\n".join(
+            f"- [{i.severity}] {i.description}" + (f" Suggestion: {i.suggestion}" if i.suggestion else "")
+            for i in issues
+        )
+        system = _REVISE_SYSTEM_TEMPLATE.format(context=context)
+        user_content = (
+            f"User question:\n{question}\n\n"
+            f"Draft answer:\n{draft}\n\n"
+            f"Reviewer issues to resolve:\n{lines}"
+        )
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_content},
+        ]
+        return self.client.chat_completion(messages, model=model, disable_thinking=True).text
 
     def _judge_name(self) -> str:
         return resolve_judge_model(self.config)
 
     def _evaluate_loop(
         self, question: str, strategy: str, context: str,
-        results: list[WorkerResult], answer: str, model: str, evaluator,
+        answer: str, model: str, evaluator,
+        improve,
     ) -> str:
         judge = Judge(self.client, self._judge_name())
         threshold = evaluator.min_dimension_score
@@ -127,9 +364,7 @@ class Orchestrator:
                 return answer
             feedback = [f"{dim}: {score}/5" for dim, score in scorecard.items() if score < threshold]
             try:
-                answer = self._reaggregate(
-                    question, strategy, context, results, answer, feedback, round_no, model
-                )
+                answer = improve(answer, feedback, round_no)
             except LLMError:
                 return answer
         return answer

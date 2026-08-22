@@ -305,3 +305,153 @@ def test_run_judge_uses_judge_name_from_config():
     Orchestrator(client, config, _domain()).run("huge task", _route(), "high-a")
     judge_call = client.calls[4]
     assert judge_call[1] == "judge-a"
+
+
+_CRITIQUE_PLAN_JSON = (
+    '{"perspectives": [{"title": "consistency", "focus": "internal contradictions", "role": "Consistency Reviewer"},'
+    ' {"title": "feasibility", "focus": "operational feasibility", "role": "Feasibility Reviewer"}]}'
+)
+_ISSUES_JSON = '{"issues": [{"severity": "high", "description": "contradictory deployment modes", "suggestion": "pick one"}]}'
+_ISSUES_EMPTY = '{"issues": []}'
+
+
+def _critique_domain(evaluator=None):
+    return DomainConfig(
+        name="sw",
+        description="software engineering",
+        out_of_domain_reply="Out.",
+        intents={"troubleshooting": IntentDef("troubleshooting", "debug")},
+        intent_mapping={"troubleshooting": "debugging"},
+        strategies=["debugging"],
+        prompts={"debugging": "Debugging system prompt."},
+        orchestration=OrchestrationPolicy(
+            enabled=True, min_complexity="complex", intents=["troubleshooting"],
+            max_workers=4, topology="critique",
+            evaluator=evaluator or EvaluatorPolicy(enabled=True, min_dimension_score=3, max_rounds=1),
+        ),
+    )
+
+
+class CriticFailingClient(FakeClient):
+    def chat_completion(self, messages, model=None, disable_thinking=False, json_mode=False, json_schema=None):
+        if "You are a reviewer" in messages[0]["content"]:
+            self.calls.append((messages, model, disable_thinking, json_mode, json_schema))
+            raise LLMError("critic boom")
+        return super().chat_completion(messages, model=model, disable_thinking=disable_thinking,
+                                       json_mode=json_mode, json_schema=json_schema)
+
+
+def test_run_critique_full_flow_revises_on_issues():
+    client = FakeClient([
+        "draft answer",
+        _CRITIQUE_PLAN_JSON,
+        _ISSUES_JSON,
+        _ISSUES_EMPTY,
+        "revised answer",
+    ])
+    result = Orchestrator(client, _config(), _critique_domain(evaluator=EvaluatorPolicy(enabled=False))).run(
+        "huge task", _route(), "high-a")
+    assert result == "revised answer"
+    assert len(client.calls) == 5
+    # draft keeps client-default thinking behaviour (parity with Strategy.process)
+    assert client.calls[0][2] is False
+    assert client.calls[0][0][0]["content"] == "Debugging system prompt."
+    # perspectives planner call uses json_schema intent and disables thinking
+    _, _, p_dt, p_jm, p_schema = client.calls[1]
+    assert p_schema is not None and p_jm is False and p_dt is True
+    # critic calls disable thinking and express json_schema intent
+    critic_calls = [c for c in client.calls[2:4] if "You are a reviewer" in c[0][0]["content"]]
+    assert len(critic_calls) == 2
+    for _, _, dt, _, schema in critic_calls:
+        assert dt is True and schema is not None
+    # revise is a single-author call over draft + findings
+    assert "You authored the draft" in client.calls[4][0][0]["content"]
+    revise_user = client.calls[4][0][-1]["content"]
+    assert "Draft answer:\ndraft answer" in revise_user
+    assert "contradictory deployment modes" in revise_user
+
+
+def test_run_critique_no_issues_skips_revise():
+    client = FakeClient(["draft answer", _CRITIQUE_PLAN_JSON, _ISSUES_EMPTY, _ISSUES_EMPTY])
+    result = Orchestrator(client, _config(), _critique_domain(evaluator=EvaluatorPolicy(enabled=False))).run(
+        "huge task", _route(), "high-a")
+    assert result == "draft answer"
+    assert len(client.calls) == 4
+    assert not any("You authored the draft" in c[0][0]["content"] for c in client.calls)
+
+
+def test_run_critique_perspectives_invalid_returns_draft():
+    client = FakeClient(["draft answer", "not json"])
+    result = Orchestrator(client, _config(), _critique_domain(evaluator=EvaluatorPolicy(enabled=False))).run(
+        "huge task", _route(), "high-a")
+    assert result == "draft answer"
+    assert len(client.calls) == 2
+
+
+def test_run_critique_all_critics_fail_returns_draft():
+    client = CriticFailingClient(["draft answer", _CRITIQUE_PLAN_JSON])
+    result = Orchestrator(client, _config(), _critique_domain(evaluator=EvaluatorPolicy(enabled=False))).run(
+        "huge task", _route(), "high-a")
+    assert result == "draft answer"
+    assert len(client.calls) == 4
+
+
+def test_run_critique_critic_bad_json_yields_no_issues_from_that_critic():
+    client = FakeClient([
+        "draft answer",
+        _CRITIQUE_PLAN_JSON,
+        "not json",
+        _ISSUES_JSON,
+        "revised answer",
+    ])
+    result = Orchestrator(client, _config(), _critique_domain(evaluator=EvaluatorPolicy(enabled=False))).run(
+        "huge task", _route(), "high-a")
+    assert result == "revised answer"
+    revise_calls = [c for c in client.calls if "You authored the draft" in c[0][0]["content"]]
+    assert len(revise_calls) == 1
+    assert "contradictory deployment modes" in revise_calls[0][0][-1]["content"]
+
+
+def test_run_critique_revise_llm_error_returns_draft():
+    client = CallRaisingClient(
+        ["draft answer", _CRITIQUE_PLAN_JSON, _ISSUES_JSON, _ISSUES_EMPTY, "unused"],
+        raise_on_call=4,
+    )
+    result = Orchestrator(client, _config(), _critique_domain(evaluator=EvaluatorPolicy(enabled=False))).run(
+        "huge task", _route(), "high-a")
+    assert result == "draft answer"
+
+
+def test_run_critique_evaluator_low_score_revises_with_judge_feedback():
+    client = FakeClient([
+        "draft answer",
+        _CRITIQUE_PLAN_JSON,
+        _ISSUES_EMPTY,
+        _ISSUES_EMPTY,
+        _SCORECARD_LOW,
+        "judge-improved answer",
+        _SCORECARD_PASS,
+    ])
+    result = Orchestrator(client, _config(), _critique_domain()).run("huge task", _route(), "high-a")
+    assert result == "judge-improved answer"
+    assert len(client.calls) == 7
+    # 5th call is the judge scoring the draft
+    assert client.calls[4][0][-1]["content"] == "huge task"
+    # 6th call is a revise seeded with the judge feedback
+    assert "You authored the draft" in client.calls[5][0][0]["content"]
+    revise_user = client.calls[5][0][-1]["content"]
+    assert "correctness: 2/5" in revise_user
+    assert "Draft answer:\ndraft answer" in revise_user
+
+
+def test_run_critique_evaluator_passes_returns_answer_unchanged():
+    client = FakeClient([
+        "draft answer",
+        _CRITIQUE_PLAN_JSON,
+        _ISSUES_EMPTY,
+        _ISSUES_EMPTY,
+        _SCORECARD_PASS,
+    ])
+    result = Orchestrator(client, _config(), _critique_domain()).run("huge task", _route(), "high-a")
+    assert result == "draft answer"
+    assert len(client.calls) == 5
