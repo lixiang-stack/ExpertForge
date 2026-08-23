@@ -281,6 +281,7 @@ class OrchestrationPolicy:
     min_complexity: str = "complex"
     intents: list[str] = field(default_factory=list)
     max_workers: int = 4
+    topology: str = "map_reduce"
     evaluator: EvaluatorPolicy = field(default_factory=EvaluatorPolicy)
 
 

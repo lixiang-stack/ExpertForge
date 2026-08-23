@@ -124,6 +124,8 @@ def build_html_report(events: list[dict], *, default_collapsed: bool = True) -> 
     def _chart_phase(ph: str) -> str:
         if ph.startswith("orchestration.worker."):
             return "orchestration.worker"
+        if ph.startswith("orchestration.critic."):
+            return "orchestration.critic"
         if ph.startswith("strategy."):
             return "strategy"
         return ph

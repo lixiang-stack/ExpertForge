@@ -101,6 +101,30 @@ def test_html_phase_latency_merges_workers_and_strategies():
     assert "70 ms" not in html
 
 
+def test_html_phase_latency_merges_critics():
+    events = [
+        {"type": "trace_start", "trace_id": "a", "question": "q", "domain": "sw",
+         "phase": "trace", "ts": 1},
+        {"type": "llm_call", "trace_id": "a", "phase": "orchestration.critic.1", "model": "m",
+         "prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2,
+         "latency_ms": 40, "status": "ok", "ts": 2},
+        {"type": "llm_call", "trace_id": "a", "phase": "orchestration.critic.2", "model": "m",
+         "prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2,
+         "latency_ms": 60, "status": "ok", "ts": 3},
+        {"type": "llm_call", "trace_id": "a", "phase": "orchestration.critic.3", "model": "m",
+         "prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2,
+         "latency_ms": 20, "status": "ok", "ts": 4},
+        {"type": "trace_end", "trace_id": "a", "answer_len": 1, "total_llm_calls": 3,
+         "total_tokens": 6, "total_latency_ms": 120.0, "reject": False,
+         "phase": "trace", "ts": 5},
+    ]
+    html = build_html_report(events)
+    assert "orchestration.critic" in html
+    assert "120 ms" in html   # orchestration.critic = 40 + 60 + 20
+    assert "40 ms" not in html
+    assert "60 ms" not in html
+
+
 def test_html_worker_stage_nested():
     html = build_html_report(_worker_events())
     assert "orchestration.worker" in html
