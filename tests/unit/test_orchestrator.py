@@ -432,41 +432,6 @@ def test_run_critique_revise_llm_error_returns_draft():
     assert result == "draft answer"
 
 
-def test_run_critique_evaluator_low_score_revises_with_judge_feedback():
-    client = FakeClient([
-        "draft answer",
-        _CRITIQUE_PLAN_JSON,
-        _ISSUES_EMPTY,
-        _ISSUES_EMPTY,
-        _SCORECARD_LOW,
-        "judge-improved answer",
-        _SCORECARD_PASS,
-    ])
-    result = Orchestrator(client, _config(), _critique_domain()).run("huge task", _route(), "high-a")
-    assert result == "judge-improved answer"
-    assert len(client.calls) == 7
-    # 5th call is the judge scoring the draft
-    assert client.calls[4][0][-1]["content"] == "huge task"
-    # 6th call is a revise seeded with the judge feedback
-    assert "You authored the draft" in client.calls[5][0][0]["content"]
-    revise_user = client.calls[5][0][-1]["content"]
-    assert "correctness: 2/5" in revise_user
-    assert "Draft answer:\ndraft answer" in revise_user
-
-
-def test_run_critique_evaluator_passes_returns_answer_unchanged():
-    client = FakeClient([
-        "draft answer",
-        _CRITIQUE_PLAN_JSON,
-        _ISSUES_EMPTY,
-        _ISSUES_EMPTY,
-        _SCORECARD_PASS,
-    ])
-    result = Orchestrator(client, _config(), _critique_domain()).run("huge task", _route(), "high-a")
-    assert result == "draft answer"
-    assert len(client.calls) == 5
-
-
 from agent.config import CritiquePolicy
 
 _FOUR_PERSPECTIVES_JSON = (
@@ -591,3 +556,103 @@ def test_revise_prompt_contains_surgical_constraints():
     system = client.calls[4][0][0]["content"]
     assert "You authored the draft" in system
     assert "Do NOT expand the answer" in system
+
+
+_JUDGE_MARKER = "strict evaluator"
+
+
+def _gate_call_indices(client):
+    judge = [i for i, c in enumerate(client.calls) if _JUDGE_MARKER in c[0][0]["content"]]
+    critic = [i for i, c in enumerate(client.calls) if "You are a reviewer" in c[0][0]["content"]]
+    return judge, critic
+
+
+def test_run_critique_gate_pass_returns_draft_early():
+    client = FakeClient(["draft answer", _SCORECARD_PASS])
+    result = Orchestrator(client, _config(), _critique_domain()).run("huge task", _route(), "high-a")
+    assert result == "draft answer"
+    assert len(client.calls) == 2
+    judge, critic = _gate_call_indices(client)
+    assert judge == [1] and critic == []
+
+
+def test_run_critique_gate_fail_runs_critique_then_revise_then_rejudges():
+    client = FakeClient([
+        "draft answer",        # 0 draft
+        _SCORECARD_LOW,        # 1 gate judge on draft -> fail
+        _CRITIQUE_PLAN_JSON,   # 2 improve(0): perspectives
+        _ISSUES_JSON,          # 3 critic consistency
+        _ISSUES_EMPTY,         # 4 critic feasibility
+        "revised answer",      # 5 budgeted revise
+        _SCORECARD_PASS,       # 6 round-1 judge on revised -> pass
+    ])
+    result = Orchestrator(client, _config(), _critique_domain()).run("huge task", _route(), "high-a")
+    assert result == "revised answer"
+    judge, critic = _gate_call_indices(client)
+    assert judge == [1, 6]
+    assert critic == [3, 4]
+    revise_user = client.calls[5][0][-1]["content"]
+    assert "contradictory deployment modes" in revise_user
+    assert "Draft answer:\ndraft answer" in revise_user
+
+
+def test_run_critique_gate_round1_low_revises_with_judge_feedback():
+    domain = _critique_domain(
+        evaluator=EvaluatorPolicy(enabled=True, min_dimension_score=3, max_rounds=2))
+    client = FakeClient([
+        "draft answer",        # 0 draft
+        _SCORECARD_LOW,        # 1 gate fails
+        _CRITIQUE_PLAN_JSON,   # 2 improve(0): critics find nothing
+        _ISSUES_EMPTY,         # 3
+        _ISSUES_EMPTY,         # 4
+        _SCORECARD_LOW,        # 5 round-1 judge still low
+        "judge-improved",      # 6 improve(1): judge-feedback revise
+        _SCORECARD_PASS,       # 7 round-2 judge -> pass
+    ])
+    result = Orchestrator(client, _config(), domain).run("huge task", _route(), "high-a")
+    assert result == "judge-improved"
+    assert len(client.calls) == 8
+    feedback_user = client.calls[6][0][-1]["content"]
+    assert "correctness: 2/5" in feedback_user
+
+
+def test_run_critique_gate_fail_empty_issues_exhausts_rounds_returns_draft():
+    client = FakeClient([
+        "draft answer",        # 0 draft
+        _SCORECARD_LOW,        # 1 gate fails
+        _CRITIQUE_PLAN_JSON,   # 2 perspectives
+        _ISSUES_EMPTY,         # 3 critics find nothing -> improve returns draft
+        _ISSUES_EMPTY,         # 4
+        _SCORECARD_LOW,        # 5 round-1 judges same draft -> exhausted
+    ])
+    result = Orchestrator(client, _config(), _critique_domain()).run("huge task", _route(), "high-a")
+    assert result == "draft answer"
+    assert len(client.calls) == 6
+
+
+def test_run_critique_gate_judge_parse_failure_treated_as_pass():
+    client = FakeClient(["draft answer", "not json"])
+    result = Orchestrator(client, _config(), _critique_domain()).run("huge task", _route(), "high-a")
+    assert result == "draft answer"
+    assert len(client.calls) == 2
+
+
+def test_run_critique_gate_zero_max_rounds_single_judge_no_critique():
+    domain = _critique_domain(
+        evaluator=EvaluatorPolicy(enabled=True, min_dimension_score=3, max_rounds=0))
+    client = FakeClient(["draft answer", _SCORECARD_LOW])
+    result = Orchestrator(client, _config(), domain).run("huge task", _route(), "high-a")
+    assert result == "draft answer"
+    assert len(client.calls) == 2
+    _, critic = _gate_call_indices(client)
+    assert critic == []
+
+
+def test_run_critique_gate_fail_revise_carries_p2_budget():
+    client = BudgetRecordingClient(
+        ["draft answer", _SCORECARD_LOW, _CRITIQUE_PLAN_JSON, _ISSUES_JSON, _ISSUES_EMPTY,
+         "revised answer", _SCORECARD_PASS],
+        completion_tokens=2000,
+    )
+    Orchestrator(client, _config(), _critique_domain()).run("huge task", _route(), "high-a")
+    assert client.max_tokens_seen[5] == 2200  # ceil(2000 * 1.1), inside [1024, 6000]

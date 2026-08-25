@@ -241,6 +241,32 @@ class Orchestrator:
         draft_result = self._draft(question, strategy, context, model)
         draft = draft_result.text
         draft_completion_tokens = draft_result.completion_tokens or None
+        if not (policy and policy.evaluator.enabled):
+            return self._critique_pass(
+                question, strategy, context, draft, model, policy, intent,
+                draft_completion_tokens=draft_completion_tokens,
+            )
+
+        def improve(previous: str, feedback: list[str], round_no: int) -> str:
+            if round_no == 0:
+                return self._critique_pass(
+                    question, strategy, context, previous, model, policy, intent,
+                    draft_completion_tokens=draft_completion_tokens,
+                )
+            judge_issues = [
+                Issue(severity="high", description=f"Judge scored too low - {f}", suggestion="")
+                for f in feedback
+            ]
+            return self._revise(question, strategy, context, previous, judge_issues, model)
+
+        return self._evaluate_loop(
+            question, strategy, context, draft, model, policy.evaluator, improve=improve,
+        )
+
+    def _critique_pass(
+        self, question: str, strategy: str, context: str, draft: str, model: str,
+        policy, intent: str, draft_completion_tokens: int | None = None,
+    ) -> str:
         max_perspectives = self._resolve_max_perspectives(intent)
         perspectives = self._plan_perspectives(
             question, strategy, context, model, max_perspectives=max_perspectives,
@@ -258,29 +284,16 @@ class Orchestrator:
                         "critic failure", task=r.task.title, role=r.task.role, error=r.error
                     )
             issues = self._consolidate(results)
-        answer = draft
-        if issues:
-            try:
-                answer = self._revise(
-                    question, strategy, context, draft, issues, model,
-                    draft_completion_tokens=draft_completion_tokens,
-                )
-            except LLMError:
-                logger.warning("revise failure, returning draft")
-                answer = draft
-        if not (policy and policy.evaluator.enabled):
-            return answer
-
-        def improve(previous: str, feedback: list[str], round_no: int) -> str:
-            judge_issues = [
-                Issue(severity="high", description=f"Judge scored too low - {f}", suggestion="")
-                for f in feedback
-            ]
-            return self._revise(question, strategy, context, previous, judge_issues, model)
-
-        return self._evaluate_loop(
-            question, strategy, context, answer, model, policy.evaluator, improve=improve,
-        )
+        if not issues:
+            return draft
+        try:
+            return self._revise(
+                question, strategy, context, draft, issues, model,
+                draft_completion_tokens=draft_completion_tokens,
+            )
+        except LLMError:
+            logger.warning("revise failure, returning draft")
+            return draft
 
     def _draft(self, question: str, strategy: str, context: str, model: str):
         messages = [
