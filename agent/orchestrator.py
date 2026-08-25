@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
-from .config import AgentConfig, DomainConfig, resolve_judge_model
+from .config import AgentConfig, CritiquePolicy, DomainConfig, resolve_judge_model
 from .evaluation.judge import Judge
 from .llm import LLMClient, LLMError
 from .loggers import get_logger
@@ -128,7 +129,7 @@ Task context:
 {context}
 
 Rules:
-- Plan 2-4 distinct review perspectives for checking a draft expert answer.
+- Plan exactly {n} distinct review perspectives for checking a draft expert answer.
 - Each perspective must be verifiable by reading the user's question and the
   draft alone (e.g. Consistency & Coherence, Feasibility & Operations,
   Compliance & Security, Cost).
@@ -136,9 +137,7 @@ Rules:
 - Output ONLY a single JSON object: {{"perspectives": [{{"title": "...", "focus": "...", "role": "..."}}]}}
 """
 
-_CRITIC_SYSTEM_TEMPLATE = """{context}
-
-You are a reviewer. Your review perspective: {role}
+_CRITIC_SYSTEM_TEMPLATE = """You are a reviewer. Your review perspective: {role}
 Focus: {instruction}
 
 Review the draft answer to the user's question from this perspective only.
@@ -159,6 +158,10 @@ You authored the draft answer below. Reviewers found issues in it. Produce an
 improved final version that resolves every issue while keeping the overall
 structure and all correct content. State important assumptions explicitly;
 never present invented numbers or facts as established requirements.
+
+Resolve ONLY the listed issues with targeted edits. Do NOT expand the answer
+with new sections; keep the final version on the same scale as the draft.
+Preserve all correct content that no issue implicates.
 """
 
 
@@ -195,13 +198,18 @@ class Orchestrator:
         proc = self._processors[strategy]
         return proc.build_system_prompt()
 
+    def _resolve_max_perspectives(self, intent: str) -> int:
+        policy = self.domain.orchestration
+        critique = policy.critique if policy and policy.critique else CritiquePolicy()
+        return critique.max_perspectives_by_intent.get(intent, critique.default_max_perspectives)
+
     def run(self, question: str, route: RouteResult, model: str) -> str:
         logger.info("orchestration start", strategy=route.strategy, model=model)
         context = self._strategy_context(route.strategy)
         policy = self.domain.orchestration
         topology = policy.topology if policy else "map_reduce"
         if topology == "critique":
-            return self._run_critique(question, route.strategy, context, model, policy)
+            return self._run_critique(question, route.strategy, context, model, policy, route.intent)
         return self._run_map_reduce(question, route, context, model, policy)
 
     def _run_map_reduce(self, question: str, route: RouteResult, context: str, model: str, policy) -> str:
@@ -229,14 +237,19 @@ class Orchestrator:
                 question, route.strategy, context, results, previous, feedback, round_no, model),
         )
 
-    def _run_critique(self, question: str, strategy: str, context: str, model: str, policy) -> str:
-        draft = self._draft(question, strategy, context, model)
-        perspectives = self._plan_perspectives(question, strategy, context, model)
+    def _run_critique(self, question: str, strategy: str, context: str, model: str, policy, intent: str) -> str:
+        draft_result = self._draft(question, strategy, context, model)
+        draft = draft_result.text
+        draft_completion_tokens = draft_result.completion_tokens or None
+        max_perspectives = self._resolve_max_perspectives(intent)
+        perspectives = self._plan_perspectives(
+            question, strategy, context, model, max_perspectives=max_perspectives,
+        )
         issues: list[Issue] = []
         if perspectives:
             results = run_workers(
                 perspectives,
-                lambda p: self._critic(question, p, context, draft, model),
+                lambda p: self._critic(question, p, draft, model),
                 max_workers=policy.max_workers if policy else 4,
             )
             for r in results:
@@ -248,7 +261,10 @@ class Orchestrator:
         answer = draft
         if issues:
             try:
-                answer = self._revise(question, strategy, context, draft, issues, model)
+                answer = self._revise(
+                    question, strategy, context, draft, issues, model,
+                    draft_completion_tokens=draft_completion_tokens,
+                )
             except LLMError:
                 logger.warning("revise failure, returning draft")
                 answer = draft
@@ -266,22 +282,24 @@ class Orchestrator:
             question, strategy, context, answer, model, policy.evaluator, improve=improve,
         )
 
-    def _draft(self, question: str, strategy: str, context: str, model: str) -> str:
+    def _draft(self, question: str, strategy: str, context: str, model: str):
         messages = [
             {"role": "system", "content": context},
             {"role": "user", "content": question},
         ]
         # No disable_thinking: keep the client default so the draft has the
         # same reasoning budget as the single-call baseline (Strategy.process).
-        return self.client.chat_completion(messages, model=model).text
+        return self.client.chat_completion(messages, model=model)
 
     def _plan_perspectives(
-        self, question: str, strategy: str, context: str, model: str
+        self, question: str, strategy: str, context: str, model: str, *,
+        max_perspectives: int,
     ) -> list[WorkerTask] | None:
         prompt = _PERSPECTIVES_PROMPT.format(
             name=self.domain.name,
             description=self.domain.description,
             context=context,
+            n=max_perspectives,
         )
         messages = [
             {"role": "system", "content": prompt},
@@ -305,11 +323,11 @@ class Orchestrator:
             if not isinstance(role, str) or not role:
                 role = title
             perspectives.append(WorkerTask(title=title, instruction=focus, role=role))
-        return perspectives or None
+        return perspectives[:max_perspectives] or None
 
-    def _critic(self, question: str, perspective: WorkerTask, context: str, draft: str, model: str) -> str:
+    def _critic(self, question: str, perspective: WorkerTask, draft: str, model: str) -> str:
         system = _CRITIC_SYSTEM_TEMPLATE.format(
-            context=context, role=perspective.role, instruction=perspective.instruction,
+            role=perspective.role, instruction=perspective.instruction,
         )
         messages = [
             {"role": "system", "content": system},
@@ -327,7 +345,15 @@ class Orchestrator:
             issues.extend(_parse_issues(r.text))
         return issues
 
-    def _revise(self, question: str, strategy: str, context: str, draft: str, issues: list[Issue], model: str) -> str:
+    def _revise(self, question: str, strategy: str, context: str, draft: str, issues: list[Issue],
+                model: str, draft_completion_tokens: int | None = None) -> str:
+        policy = self.domain.orchestration
+        critique = policy.critique if policy and policy.critique else CritiquePolicy()
+        if draft_completion_tokens:
+            raw = math.ceil(draft_completion_tokens * critique.revise_token_ratio)
+            max_tokens = max(critique.revise_min_tokens, min(raw, critique.revise_max_tokens))
+        else:
+            max_tokens = critique.revise_max_tokens
         lines = "\n".join(
             f"- [{i.severity}] {i.description}" + (f" Suggestion: {i.suggestion}" if i.suggestion else "")
             for i in issues
@@ -342,7 +368,9 @@ class Orchestrator:
             {"role": "system", "content": system},
             {"role": "user", "content": user_content},
         ]
-        return self.client.chat_completion(messages, model=model, disable_thinking=True).text
+        return self.client.chat_completion(
+            messages, model=model, disable_thinking=True, max_tokens=max_tokens,
+        ).text
 
     def _judge_name(self) -> str:
         return resolve_judge_model(self.config)

@@ -276,6 +276,15 @@ class EvaluatorPolicy:
 
 
 @dataclass
+class CritiquePolicy:
+    default_max_perspectives: int = 3
+    max_perspectives_by_intent: dict[str, int] = field(default_factory=dict)
+    revise_token_ratio: float = 1.1
+    revise_min_tokens: int = 1024
+    revise_max_tokens: int = 6000
+
+
+@dataclass
 class OrchestrationPolicy:
     enabled: bool = True
     min_complexity: str = "complex"
@@ -283,6 +292,7 @@ class OrchestrationPolicy:
     max_workers: int = 4
     topology: str = "map_reduce"
     evaluator: EvaluatorPolicy = field(default_factory=EvaluatorPolicy)
+    critique: CritiquePolicy | None = None
 
 
 @dataclass

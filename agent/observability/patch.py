@@ -298,32 +298,35 @@ class Installed:
         return wrapper
 
     def _wrap_plan_perspectives(self, original, key):
-        def wrapper(orch, question, strategy, context, model):
+        def wrapper(orch, question, strategy, context, model, *, max_perspectives=None):
             inst = _current_inst()
             if inst is None:
-                return original(orch, question, strategy, context, model)  # passthrough: real business call
+                return original(orch, question, strategy, context, model,
+                                max_perspectives=max_perspectives)  # passthrough: real business call
             with phase(inst._phase(key)):
-                perspectives = original(orch, question, strategy, context, model)  # <-- real business call
+                perspectives = original(orch, question, strategy, context, model,
+                                        max_perspectives=max_perspectives)  # <-- real business call
                 tid = current_trace_id()
                 if tid:
                     data = {"degraded": True} if perspectives is None else {
                         "tasks": [{"title": t.title, "instruction": t.instruction,
                                    "role": t.role} for t in perspectives]}
+                    data["max_perspectives"] = max_perspectives
                     inst._record_decision(tid, inst._phase(key), data)
                 return perspectives
         return wrapper
 
     def _wrap_critic(self, original, key):
-        def wrapper(orch, question, perspective, context, draft, model):
+        def wrapper(orch, question, perspective, draft, model):
             inst = _current_inst()
             if inst is None:
-                return original(orch, question, perspective, context, draft, model)  # passthrough: real business call
+                return original(orch, question, perspective, draft, model)
             base = inst._phase(key)
             n = inst._next_worker(current_trace_id() or "")
             with phase(f"{base}.{n}"):
                 tid = current_trace_id()
                 try:
-                    result = original(orch, question, perspective, context, draft, model)  # <-- real business call
+                    result = original(orch, question, perspective, draft, model)
                 except Exception as e:  # noqa: BLE001 - record failure, then re-raise; business decides
                     if tid:
                         inst._record_decision(tid, f"{base}.{n}", {
@@ -336,15 +339,20 @@ class Installed:
         return wrapper
 
     def _wrap_revise(self, original, key):
-        def wrapper(orch, question, strategy, context, draft, issues, model):
+        def wrapper(orch, question, strategy, context, draft, issues, model,
+                    draft_completion_tokens=None):
             inst = _current_inst()
             if inst is None:
-                return original(orch, question, strategy, context, draft, issues, model)  # passthrough: real business call
+                return original(orch, question, strategy, context, draft, issues, model,
+                                draft_completion_tokens=draft_completion_tokens)  # passthrough: real business call
             with phase(inst._phase(key)):
-                answer = original(orch, question, strategy, context, draft, issues, model)  # <-- real business call
+                answer = original(orch, question, strategy, context, draft, issues, model,
+                                  draft_completion_tokens=draft_completion_tokens)  # <-- real business call
                 tid = current_trace_id()
                 if tid:
-                    inst._record_decision(tid, inst._phase(key), {"issues": len(issues)})
+                    inst._record_decision(tid, inst._phase(key), {
+                        "issues": len(issues),
+                        "draft_completion_tokens": draft_completion_tokens})
                 return answer
         return wrapper
 

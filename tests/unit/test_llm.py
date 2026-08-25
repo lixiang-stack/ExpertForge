@@ -367,3 +367,33 @@ def test_constructor_defaults_to_unknown(mock_openai):
     client = LLMClient("https://api.example.com/v1", "key", "model-a")
     assert client.capabilities.provider == "unknown"
     assert client.capabilities.supports_json_schema is False
+
+
+@patch("agent.llm.OpenAI")
+def test_chat_completion_omits_max_tokens_by_default(mock_openai):
+    resp = MagicMock()
+    resp.choices[0].message.content = "x"
+    resp.model = "model-a"
+    resp.usage = None
+    mock_openai.return_value.chat.completions.create.return_value = resp
+
+    client = LLMClient("https://api.example.com/v1", "key", "model-a")
+    client.chat_completion([{"role": "user", "content": "hi"}])
+
+    kwargs = mock_openai.return_value.chat.completions.create.call_args.kwargs
+    assert "max_tokens" not in kwargs
+
+
+@patch("agent.llm.OpenAI")
+def test_chat_completion_forwards_max_tokens(mock_openai):
+    resp = MagicMock()
+    resp.choices[0].message.content = "x"
+    resp.model = "model-a"
+    resp.usage = None
+    mock_openai.return_value.chat.completions.create.return_value = resp
+
+    client = LLMClient("https://api.example.com/v1", "key", "model-a")
+    client.chat_completion([{"role": "user", "content": "hi"}], max_tokens=2048)
+
+    kwargs = mock_openai.return_value.chat.completions.create.call_args.kwargs
+    assert kwargs["max_tokens"] == 2048

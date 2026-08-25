@@ -10,3 +10,12 @@ evaluator:
   enabled: true
   min_dimension_score: 3
   max_rounds: 1
+critique:
+  default_max_perspectives: 3
+  max_perspectives_by_intent:
+    architecture_design: 3
+    troubleshooting: 2
+    code_task: 2
+  revise_token_ratio: 1.1
+  revise_min_tokens: 1024
+  revise_max_tokens: 6000

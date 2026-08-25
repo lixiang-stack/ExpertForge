@@ -1122,3 +1122,94 @@ def test_load_domain_config_topology_invalid_raises(tmp_path):
     )
     with pytest.raises(ConfigError):
         load_domain_config(str(base))
+
+
+_CRITIQUE_YAML_FULL = (
+    "topology: critique\n"
+    "critique:\n"
+    "  default_max_perspectives: 2\n"
+    "  max_perspectives_by_intent:\n"
+    "    faq: 1\n"
+    "  revise_token_ratio: 1.5\n"
+    "  revise_min_tokens: 512\n"
+    "  revise_max_tokens: 4096\n"
+)
+
+
+def _domain_with_yaml(tmp_path, yaml_text):
+    base = tmp_path / "domain"
+    (base / "prompts").mkdir(parents=True)
+    (base / "orchestration.yaml").write_text(yaml_text, encoding="utf-8")
+    (base / "domain.json").write_text(
+        json.dumps({"name": "软件工程", "description": "d"}), encoding="utf-8"
+    )
+    (base / "intents.yaml").write_text(
+        "- id: concept_explain\n  description: explain\n"
+        "- id: faq\n  description: quick question\n",
+        encoding="utf-8",
+    )
+    (base / "intent_mapping.yaml").write_text(
+        "concept_explain: teaching\nfaq: direct\n", encoding="utf-8"
+    )
+    (base / "prompts" / "teaching.md").write_text("teach", encoding="utf-8")
+    (base / "prompts" / "direct.md").write_text("direct", encoding="utf-8")
+    return str(base)
+
+
+def test_load_domain_config_critique_absent_is_none(tmp_path):
+    domain = load_domain_config(_write_domain(tmp_path))
+    assert domain.orchestration.critique is None
+
+
+def test_load_domain_config_critique_block_parsed(tmp_path):
+    domain = load_domain_config(_domain_with_yaml(tmp_path, ORCHESTRATION_YAML + _CRITIQUE_YAML_FULL))
+    c = domain.orchestration.critique
+    assert c.default_max_perspectives == 2
+    assert c.max_perspectives_by_intent == {"faq": 1}
+    assert c.revise_token_ratio == 1.5
+    assert c.revise_min_tokens == 512
+    assert c.revise_max_tokens == 4096
+
+
+def test_load_domain_config_critique_partial_block_uses_defaults(tmp_path):
+    domain = load_domain_config(_domain_with_yaml(
+        tmp_path, ORCHESTRATION_YAML + "critique:\n  default_max_perspectives: 2\n"))
+    c = domain.orchestration.critique
+    assert c.default_max_perspectives == 2
+    assert c.max_perspectives_by_intent == {}
+    assert c.revise_token_ratio == 1.1
+    assert c.revise_min_tokens == 1024
+    assert c.revise_max_tokens == 6000
+
+
+def test_load_domain_config_critique_non_mapping_raises(tmp_path):
+    with pytest.raises(ConfigError):
+        load_domain_config(_domain_with_yaml(tmp_path, ORCHESTRATION_YAML + "critique: bogus\n"))
+
+
+def test_load_domain_config_critique_bad_default_raises(tmp_path):
+    with pytest.raises(ConfigError):
+        load_domain_config(_domain_with_yaml(
+            tmp_path, ORCHESTRATION_YAML + "critique:\n  default_max_perspectives: 0\n"))
+
+
+def test_load_domain_config_critique_unknown_intent_key_raises(tmp_path):
+    with pytest.raises(ConfigError):
+        load_domain_config(_domain_with_yaml(
+            tmp_path,
+            ORCHESTRATION_YAML
+            + "critique:\n  max_perspectives_by_intent:\n    no_such_intent: 2\n"))
+
+
+def test_load_domain_config_critique_bad_ratio_raises(tmp_path):
+    with pytest.raises(ConfigError):
+        load_domain_config(_domain_with_yaml(
+            tmp_path, ORCHESTRATION_YAML + "critique:\n  revise_token_ratio: 0\n"))
+
+
+def test_load_domain_config_critique_min_gt_max_raises(tmp_path):
+    with pytest.raises(ConfigError):
+        load_domain_config(_domain_with_yaml(
+            tmp_path,
+            ORCHESTRATION_YAML
+            + "critique:\n  revise_min_tokens: 9000\n  revise_max_tokens: 6000\n"))
