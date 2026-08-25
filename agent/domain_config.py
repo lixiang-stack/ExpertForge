@@ -10,6 +10,7 @@ from .config import (
     ComplexityLevelDef,
     ComplexityPolicy,
     ConfigError,
+    CritiquePolicy,
     DomainConfig,
     EvaluatorPolicy,
     IntentDef,
@@ -20,7 +21,8 @@ DOMAIN_FILE_CONTRACT = (
     "A domain directory must contain: 'domain.json' (name, description, "
     "out_of_domain_reply), 'intents.yaml' (list of {id, description, "
     "positive_examples, negative_examples, boundaries}), 'orchestration.yaml' "
-    "(enabled, min_complexity, intents, max_workers, evaluator), "
+    "(enabled, min_complexity, intents, max_workers, topology, evaluator, "
+    "optional critique), "
     "'intent_mapping.yaml' (intent id -> strategy id), 'prompts/*.md' (one "
     "file per strategy), optional 'complexity.yaml' (list of simple|medium|"
     "complex levels) and optional 'expert_policy.md'."
@@ -114,6 +116,11 @@ def _parse_orchestration(base: Path, intents: dict[str, IntentDef]) -> Orchestra
     max_workers = orch_data.get("max_workers", 4)
     if not isinstance(max_workers, int) or max_workers <= 0:
         raise ConfigError(f"orchestration.yaml 'max_workers' must be a positive int: {orch_path}")
+    topology = orch_data.get("topology", "map_reduce")
+    if topology not in ("map_reduce", "critique"):
+        raise ConfigError(
+            f"orchestration.yaml 'topology' must be 'map_reduce' or 'critique': {orch_path}"
+        )
     ev = orch_data.get("evaluator") or {}
     if not isinstance(ev, dict):
         raise ConfigError(f"orchestration.yaml 'evaluator' must be a mapping: {orch_path}")
@@ -123,16 +130,68 @@ def _parse_orchestration(base: Path, intents: dict[str, IntentDef]) -> Orchestra
         raise ConfigError(f"orchestration.yaml 'min_dimension_score' must be an int in 1..5: {orch_path}")
     if not isinstance(max_rounds, int) or max_rounds < 0:
         raise ConfigError(f"orchestration.yaml 'max_rounds' must be a non-negative int: {orch_path}")
+    critique_data = orch_data.get("critique")
+    critique = None
+    if critique_data is not None:
+        if not isinstance(critique_data, dict):
+            raise ConfigError(f"orchestration.yaml 'critique' must be a mapping: {orch_path}")
+        default_max = critique_data.get("default_max_perspectives", 3)
+        if not isinstance(default_max, int) or default_max <= 0:
+            raise ConfigError(
+                f"orchestration.yaml 'default_max_perspectives' must be a positive int: {orch_path}"
+            )
+        by_intent_raw = critique_data.get("max_perspectives_by_intent", {})
+        if not isinstance(by_intent_raw, dict):
+            raise ConfigError(
+                f"orchestration.yaml 'max_perspectives_by_intent' must be a mapping: {orch_path}"
+            )
+        by_intent: dict[str, int] = {}
+        for key, value in by_intent_raw.items():
+            if not isinstance(key, str) or key not in intents:
+                raise ConfigError(
+                    f"orchestration.yaml 'max_perspectives_by_intent' references "
+                    f"unknown intent {key!r}: {orch_path}"
+                )
+            if not isinstance(value, int) or value <= 0:
+                raise ConfigError(
+                    f"orchestration.yaml 'max_perspectives_by_intent[{key}]' "
+                    f"must be a positive int: {orch_path}"
+                )
+            by_intent[key] = value
+        ratio = critique_data.get("revise_token_ratio", 1.1)
+        if not isinstance(ratio, (int, float)) or ratio <= 0:
+            raise ConfigError(
+                f"orchestration.yaml 'revise_token_ratio' must be a positive number: {orch_path}"
+            )
+        min_tokens = critique_data.get("revise_min_tokens", 1024)
+        max_tokens = critique_data.get("revise_max_tokens", 6000)
+        for name, value in (("revise_min_tokens", min_tokens), ("revise_max_tokens", max_tokens)):
+            if not isinstance(value, int) or value <= 0:
+                raise ConfigError(f"orchestration.yaml '{name}' must be a positive int: {orch_path}")
+        if min_tokens > max_tokens:
+            raise ConfigError(
+                f"orchestration.yaml 'revise_min_tokens' must be "
+                f"<= 'revise_max_tokens': {orch_path}"
+            )
+        critique = CritiquePolicy(
+            default_max_perspectives=default_max,
+            max_perspectives_by_intent=by_intent,
+            revise_token_ratio=ratio,
+            revise_min_tokens=min_tokens,
+            revise_max_tokens=max_tokens,
+        )
     return OrchestrationPolicy(
         enabled=bool(orch_data.get("enabled", True)),
         min_complexity=min_complexity,
         intents=orch_intents,
         max_workers=max_workers,
+        topology=topology,
         evaluator=EvaluatorPolicy(
             enabled=bool(ev.get("enabled", True)),
             min_dimension_score=min_score,
             max_rounds=max_rounds,
         ),
+        critique=critique,
     )
 
 

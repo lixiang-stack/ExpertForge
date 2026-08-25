@@ -1,26 +1,17 @@
 cases:
-  - id: se-070
-    tier: routing
-    question: "Design the module structure for a monorepo with several shared packages and clear dependency boundaries."
-    expected: {domain: software_engineering, intent: architecture_design, complexity: medium, strategy: planning, orchestrate: false}
-  - id: se-071
+  - id: se-1
     tier: full_expert
-    smoke: true
-    question: "Design a scalable microservices architecture for an e-commerce platform covering orders, payments, and inventory."
+    question: "设计一个面向全球用户的视频内容平台，支持千万级 DAU、视频上传、转码、审核、分发和推荐。系统需要支持热门内容产生的流量突增，并保证内容上传后能够可靠完成处理。请设计存储、异步任务、CDN、转码、审核和数据处理架构，并分析一致性、吞吐、成本和故障恢复之间的权衡。"
     expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: planning, orchestrate: true}
-  - id: se-082
-    tier: routing
-    question: "Should a startup migrate from a monolith to microservices now, or stay with the monolith?"
-    expected: {domain: software_engineering, intent: architecture_design, complexity: medium, strategy: planning, orchestrate: false}
-  - id: se-126
+  - id: se-2
     tier: full_expert
-    question: "Design the architecture of a system that must handle millions of events per second."
+    question: "设计一个全球多活互联网业务系统，要求用户请求可以就近访问任意区域，并在单个区域完全不可用时自动切换。系统包含用户、订单和支付等核心数据，需要处理跨区域写入、数据同步冲突和故障恢复。请设计流量路由、数据架构、冲突处理和故障切换方案，并分析真正多活与单元化架构之间的权衡。"
     expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: planning, orchestrate: true}
-  - id: se-128
+  - id: se-3
     tier: full_expert
-    question: "Design a distributed rate limiter for millions of QPS with multi-region deployment."
+    question: "设计一个支持全球业务的电商订单系统，峰值需要支持数万 TPS，同时处理库存、订单、支付和物流状态。系统需要支持多区域部署，并保证用户下单时库存不能被超卖；同时要求区域故障时业务能够继续运行。请重点分析库存一致性、订单状态机、跨区域数据同步、故障恢复以及最终一致性与可用性之间的权衡。"
     expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: planning, orchestrate: true}
-  - id: se-129
+  - id: se-4
     tier: full_expert
     question: "设计一个支持千万用户的支付系统，同时考虑一致性、灾备、合规、成本和多区域部署。"
     expected: {domain: software_engineering, intent: architecture_design, complexity: complex, strategy: planning, orchestrate: true}

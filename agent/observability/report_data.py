@@ -144,6 +144,8 @@ def _decision_type(phase: str) -> str:
         return "plan"
     if phase.startswith("orchestration.worker"):
         return "worker"
+    if phase.startswith("orchestration.critic"):
+        return "worker"
     return "decision"
 
 
@@ -212,6 +214,8 @@ def _stage_title(step: Step) -> str:
         return "orchestration.planner"
     if ph.startswith("orchestration.worker."):
         return "orchestration.worker"
+    if ph.startswith("orchestration.critic"):
+        return "orchestration.critic"
     if ph == "orchestration.aggregate":
         return "orchestration.aggregate"
     return ph
@@ -243,7 +247,7 @@ def group_stages(timeline: dict[str, list[Step]]) -> dict[str, list[Stage]]:
                 by_title[title] = Stage(title=title)
                 order.append(title)
             stage = by_title[title]
-            if title == "orchestration.worker":
+            if title in ("orchestration.worker", "orchestration.critic"):
                 n = _worker_number(s.phase)
                 wg = next((w for w in stage.workers if w.number == n), None)
                 if wg is None:

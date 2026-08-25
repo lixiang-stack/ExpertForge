@@ -52,9 +52,10 @@ def parse_scorecard(text: str | None) -> dict | None:
 
 
 class Judge:
-    def __init__(self, client: LLMClient, model: str):
+    def __init__(self, client: LLMClient, model: str, temperature: float = 0.0):
         self.client = client
         self.model = model
+        self.temperature = temperature
 
     def score(self, question: str, answer: str, *, reference: str | None = None) -> dict | None:
         prompt = build_judge_prompt(answer, reference=reference)
@@ -66,6 +67,7 @@ class Judge:
             result = self.client.chat_completion(
                 messages,
                 model=self.model,
+                temperature=self.temperature,
                 disable_thinking=True,
                 json_mode=True,
             )

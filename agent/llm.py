@@ -47,6 +47,7 @@ class LLMClient:
         disable_thinking: bool = False,
         json_mode: bool = False,
         json_schema: dict | None = None,
+        max_tokens: int | None = None,
     ) -> ChatResult:
         if not any(m.get("role") == "user" for m in messages):
             raise LLMError(
@@ -63,6 +64,8 @@ class LLMClient:
                 "temperature": temperature,
                 "stream": False,
             }
+            if max_tokens is not None:
+                kwargs["max_tokens"] = max_tokens
             if mode == "json_schema":
                 kwargs["response_format"] = {
                     "type": "json_schema",
